@@ -200,27 +200,181 @@
     el.orderLines.innerHTML = html;
     $$('[data-minus]', el.orderLines).forEach(b => b.onclick = () => changeQty(Number(b.dataset.minus), -1));
     $$('[data-plus]', el.orderLines).forEach(b => b.onclick = () => changeQty(Number(b.dataset.plus), 1));
-    $$('[data-del]', el.orderLines).forEach(b => b.onclick = () => { state.order.splice(Number(b.dataset.del), 1); changedOrder(); });
+    $$('[data-del]', el.orderLines).forEach(b => b.onclick = () => removeOrderLine(Number(b.dataset.del)));
     $('#orderNote').addEventListener('input', e => state.note = e.target.value || '');
     $('#clearOrder').onclick = () => { state.order = []; state.note = ''; changedOrder(); };
     $('#depositBack').onclick = () => addDepositReturn();
     $('#saveOrder').onclick = () => saveOrder();
   }
-  function changeQty(index, by) { const line = state.order[index]; if (!line) return; line.quantity += by; if (line.quantity <= 0) state.order.splice(index, 1); changedOrder(); }
+  function removeOrderLine(index) {
+    const line = state.order[index];
+    if (!line) return;
+    if (!line.isDeposit && !line.isDepositReturn) {
+      const articleName = line.articleName;
+      state.order = state.order.filter(x => !(x.articleName === articleName && (x === line || x.isDeposit)));
+    } else {
+      state.order.splice(index, 1);
+    }
+    changedOrder();
+  }
+  function changeQty(index, by) {
+    const line = state.order[index];
+    if (!line) return;
+    if (!line.isDeposit && !line.isDepositReturn) {
+      const dep = state.order.find(x => x.isDeposit && x.articleName === line.articleName);
+      line.quantity += by;
+      if (dep) dep.quantity += by;
+      if (line.quantity <= 0) {
+        const articleName = line.articleName;
+        state.order = state.order.filter(x => !(x.articleName === articleName && (x === line || x.isDeposit)));
+      } else if (dep && dep.quantity <= 0) {
+        state.order = state.order.filter(x => x !== dep);
+      }
+    } else {
+      line.quantity += by;
+      if (line.quantity <= 0) state.order.splice(index, 1);
+    }
+    changedOrder();
+  }
   function changedOrder() { updateOrderButton(); renderOrderSheet(); if (state.page === 'orders') renderArticleGroups(); }
   function addDepositReturn() {
-    modal(`<h2>Pfandrückgabe</h2><div class="form-grid"><div class="field"><label>Pfandpreis</label><input id="depPrice" inputmode="decimal" value="0,25"></div><div class="field"><label>Anzahl</label><input id="depQty" inputmode="numeric" value="1"></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="addDep" class="action-button">Übernehmen</button></div></div>`);
-    $('#addDep').onclick = () => { const p = num($('#depPrice').value), q = parseInt($('#depQty').value,10)||0; if (p>0 && q>0) state.order.push({ name:'Pfand zurück', articleName:'Pfand zurück', quantity:q, unitPrice:-p, isDeposit:false, isDepositReturn:true }); closeModal(); changedOrder(); };
+    modal(`<h2>Pfandrückgabe</h2><div class="form-grid"><div class="field"><label>Pfandpreis</label><input id="depPrice" inputmode="decimal" value="1,00" aria-label="Pfandpreis"></div><div class="field"><label>Anzahl</label><input id="depQty" inputmode="numeric" value="1" aria-label="Anzahl"></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="addDep" class="action-button">Übernehmen</button></div></div>`);
+    $('#addDep').onclick = () => {
+      const price = num($('#depPrice').value);
+      const q = parseInt($('#depQty').value, 10) || 0;
+      if (price <= 0) { toast('Bitte gültigen Pfandpreis eingeben'); return; }
+      if (q <= 0) { toast('Bitte gültige Anzahl eingeben'); return; }
+      state.order.push({ name:'Pfand zurück', articleName:'Pfand zurück', quantity:q, unitPrice:-price, isDeposit:false, isDepositReturn:true });
+      closeModal();
+      changedOrder();
+    };
   }
   function saveOrder() {
     if (!state.order.length) return;
     const total = orderTotal();
-    modal(`<h2>Bezahlung</h2><div class="form-grid"><div class="card"><div class="small-muted">Zu zahlen</div><div class="stat-value">${fmt(total)}</div></div><div class="field"><label>Erhalten</label><input id="received" inputmode="decimal" value="${String(total.toFixed(2)).replace('.', ',')}"></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="finishOrder" class="action-button">Speichern</button></div></div>`);
-    $('#finishOrder').onclick = () => {
-      const received = num($('#received').value);
+
+    const finish = (received) => {
       state.data.orders.push({ id:id(), date: nowIso(), eventName: state.data.currentEvent, note: state.note, received, lines: state.order.map(x => ({...x})) });
       state.order = []; state.note = ''; save(); closeModal(); closeSheet(); renderArticleGroups(); toast('Bestellung gespeichert');
     };
+
+    // Bei einem reinen Null-/Auszahlungsbetrag bleibt die bestehende Logik erhalten,
+    // ohne einen unpassenden Bezahl-Nummernblock einzublenden.
+    if (total <= 0) {
+      modal(`<div class="payment-view">
+        <h2 class="payment-title">Bestellung abschließen</h2>
+        <div class="payment-total-card">
+          <div class="small-muted">${total < 0 ? 'Auszahlung / Saldo' : 'Gesamtbetrag'}</div>
+          <div class="payment-total">${fmt(Math.abs(total))}</div>
+        </div>
+        <div class="payment-actions">
+          <button class="secondary-button" data-close>Zurück</button>
+          <button id="finishOrder" class="action-button">✓ Bestellung abschließen</button>
+        </div>
+      </div>`);
+      $('#finishOrder').onclick = () => finish(total);
+      return;
+    }
+
+    let receivedText = '0';
+    const quickAmounts = paymentQuickAmounts(total);
+    modal(`<div class="payment-view">
+      <h2 class="payment-title">Bezahlung</h2>
+      <div class="payment-total-card">
+        <div class="small-muted">Zu bezahlen</div>
+        <div class="payment-total">${fmt(total)}</div>
+      </div>
+      <div class="payment-received-card">
+        <div class="small-muted">Erhalten</div>
+        <div id="receivedDisplay" class="payment-received">${fmt(0)}</div>
+      </div>
+      <div class="payment-quick-row">
+        ${quickAmounts.map(v => `<button type="button" class="payment-quick-button" data-quick="${v}">${fmt(v)}</button>`).join('')}
+        <button type="button" id="payExact" class="payment-quick-button exact">Passend</button>
+      </div>
+      <div id="paymentBalance" class="payment-balance open">
+        <span>Noch offen</span><strong>${fmt(total)}</strong>
+      </div>
+      <div class="payment-keypad" aria-label="Nummernblock für erhaltenen Betrag">
+        <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
+        <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button>
+        <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button>
+        <button type="button" data-key=",">,</button><button type="button" data-key="0">0</button><button type="button" data-key="back" aria-label="Letzte Ziffer löschen">⌫</button>
+      </div>
+      <div class="payment-actions">
+        <button class="secondary-button" data-close>Zurück</button>
+        <button id="finishOrder" class="action-button payment-finish" disabled>✓ Bezahlung abschließen</button>
+      </div>
+    </div>`);
+
+    const display = $('#receivedDisplay');
+    const balance = $('#paymentBalance');
+    const finishButton = $('#finishOrder');
+
+    const setReceived = (value) => {
+      receivedText = String(Number(value).toFixed(2)).replace('.', ',');
+      refreshPayment();
+    };
+
+    const refreshPayment = () => {
+      const received = num(receivedText);
+      display.textContent = fmt(received);
+      const difference = received - total;
+      if (difference >= -0.0001) {
+        balance.className = 'payment-balance change';
+        balance.innerHTML = `<span>Rückgeld</span><strong>${fmt(Math.max(0, difference))}</strong>`;
+        finishButton.disabled = false;
+      } else {
+        balance.className = 'payment-balance open';
+        balance.innerHTML = `<span>Noch offen</span><strong>${fmt(Math.abs(difference))}</strong>`;
+        finishButton.disabled = true;
+      }
+    };
+
+    $$('[data-quick]', el.modalHost).forEach(button => button.onclick = () => setReceived(Number(button.dataset.quick)));
+    $('#payExact').onclick = () => setReceived(total);
+    $$('[data-key]', el.modalHost).forEach(button => button.onclick = () => {
+      const key = button.dataset.key;
+      if (key === 'back') {
+        receivedText = receivedText.length > 1 ? receivedText.slice(0, -1) : '0';
+      } else if (key === ',') {
+        if (!receivedText.includes(',')) receivedText += ',';
+      } else {
+        const comma = receivedText.indexOf(',');
+        if (comma >= 0 && receivedText.length - comma - 1 >= 2) return;
+        if (receivedText === '0') receivedText = key;
+        else receivedText += key;
+      }
+      refreshPayment();
+    });
+    finishButton.onclick = () => {
+      const received = num(receivedText);
+      if (received + 0.0001 < total) { toast('Betrag noch nicht vollständig'); return; }
+      finish(received);
+    };
+    refreshPayment();
+  }
+
+  function paymentQuickAmounts(total) {
+    const amounts = [];
+    const add = (value) => {
+      const rounded = Math.round(Number(value) * 100) / 100;
+      if (rounded > total + 0.0001 && !amounts.some(x => Math.abs(x - rounded) < 0.0001)) amounts.push(rounded);
+    };
+
+    let first = Math.ceil(total - 0.0001);
+    if (first <= total + 0.0001) first = total < 10 ? first + 1 : Math.ceil((total + 1) / 5) * 5;
+    add(first);
+
+    let second = Math.ceil(total / 5) * 5;
+    while (second <= total + 0.0001 || amounts.some(x => Math.abs(x - second) < 0.0001)) second += 5;
+    add(second);
+
+    const notes = [5, 10, 20, 50, 100, 200, 500];
+    const third = notes.find(v => v > total + 0.0001 && !amounts.some(x => Math.abs(x - v) < 0.0001) && v > (amounts.at(-1) || 0));
+    add(third || (Math.ceil((amounts.at(-1) || total) / 10) * 10 + 10));
+
+    return amounts.slice(0, 3);
   }
 
   function renderArticlesPage() {
@@ -246,7 +400,17 @@
   function deleteArticle() {
     const options = state.data.articles.map(a => `<option value="${a.id}">${escapeHtml(a.name)} (${escapeHtml(a.group)})</option>`).join('');
     modal(`<h2>Artikel löschen</h2><div class="form-grid"><div class="field"><label>Artikel auswählen</label><select id="delArticle">${options}</select></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="confirmDelArticle" class="danger-button">Löschen</button></div></div>`);
-    $('#confirmDelArticle').onclick = () => { const val = $('#delArticle').value; state.data.articles = state.data.articles.filter(a => a.id !== val); save(); closeModal(); renderArticlesPage(); toast('Artikel gelöscht'); };
+    $('#confirmDelArticle').onclick = () => {
+      const val = $('#delArticle').value;
+      const removed = state.data.articles.find(a => a.id === val);
+      state.data.articles = state.data.articles.filter(a => a.id !== val);
+      if (removed) state.order = state.order.filter(x => x.articleName !== removed.name);
+      save();
+      updateOrderButton();
+      closeModal();
+      renderArticlesPage();
+      toast('Artikel gelöscht');
+    };
   }
   function deleteGroup() {
     const groups = state.data.groups.filter(g => g.name !== 'Favoriten').map(g => `<option value="${escapeAttr(g.name)}">${escapeHtml(g.name)}</option>`).join('');
@@ -310,12 +474,29 @@
   function setCurrentEvent(name) { state.data.currentEvent = name; if (!state.data.events.some(e=>e.name===name)) state.data.events.push({name,createdAt:nowIso(),isActive:true}); state.data.events.forEach(e=>e.isActive=e.name===name); save(); }
   function renderHistoryPage() {
     const orders = currentOrders().sort((a,b)=>new Date(b.date)-new Date(a.date));
-    el.content.innerHTML = pageTitle(`Bestellhistorie · ${state.data.currentEvent}`) + `<button id="cancelLast" class="danger-button" style="width:100%;margin-bottom:10px">Letzte Bestellung stornieren</button><div id="hist"></div>`;
-    $('#cancelLast').onclick = cancelLastOrder;
-    const box = $('#hist'); if (!orders.length) { box.innerHTML = `<div class="card small-muted">Noch keine Bestellungen gespeichert.</div>`; return; }
-    orders.forEach(o => { const positions = o.lines.filter(l=>!l.isDeposit).map(l=>`${l.quantity}x ${l.name}`).join(', '); box.innerHTML += `<div class="card"><div class="small-muted">${new Date(o.date).toLocaleString('de-DE')}</div><div class="line-title">${escapeHtml(positions || 'Bestellung')}</div><div class="line-meta">${o.note ? 'Notiz: '+escapeHtml(o.note)+'<br>' : ''}Gesamt ${fmt(totalOf(o))} · Erhalten ${fmt(o.received)} · Rückgeld ${fmt(Math.max(0, Number(o.received)-totalOf(o)))}</div></div>`; });
+    el.content.innerHTML = pageTitle(`Bestellhistorie · ${state.data.currentEvent}`) + `<div id="hist"></div>`;
+    const box = $('#hist');
+    if (!orders.length) { box.innerHTML = `<div class="card small-muted">Noch keine Bestellungen gespeichert.</div>`; return; }
+    orders.forEach(o => {
+      const positions = o.lines.filter(l=>!l.isDeposit).map(l=>`${l.quantity}x ${l.name}`).join(', ');
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `<div class="small-muted">${new Date(o.date).toLocaleString('de-DE')}</div><div class="line-title">${escapeHtml(positions || 'Bestellung')}</div><div class="line-meta">${o.note ? 'Notiz: '+escapeHtml(o.note)+'<br>' : ''}Gesamt ${fmt(totalOf(o))} · Erhalten ${fmt(o.received)} · Rückgeld ${fmt(Math.max(0, Number(o.received)-totalOf(o)))}</div><button class="danger-button" style="width:100%;margin-top:10px" data-cancel-order="${escapeHtml(o.id)}">Bestellung stornieren</button>`;
+      box.appendChild(card);
+    });
+    $$('[data-cancel-order]', box).forEach(button => button.onclick = () => cancelOrder(button.dataset.cancelOrder));
   }
-  function cancelLastOrder() { const idx = state.data.orders.map((o,i)=>({o,i})).sort((a,b)=>new Date(b.o.date)-new Date(a.o.date))[0]?.i; if (idx === undefined) return; if (!confirm('Letzte Bestellung wirklich stornieren?')) return; state.data.orders.splice(idx,1); save(); renderHistoryPage(); toast('Bestellung storniert'); }
+  function cancelOrder(orderId) {
+    const idx = state.data.orders.findIndex(o => String(o.id) === String(orderId));
+    if (idx < 0) return;
+    const orderToCancel = state.data.orders[idx];
+    const when = new Date(orderToCancel.date).toLocaleString('de-DE');
+    if (!confirm(`Bestellung vom ${when} über ${fmt(totalOf(orderToCancel))} wirklich stornieren?`)) return;
+    state.data.orders.splice(idx,1);
+    save();
+    renderHistoryPage();
+    toast('Bestellung storniert');
+  }
   function totalOf(o) { return (o.lines||[]).reduce((s,l)=>s+Number(l.unitPrice)*Number(l.quantity),0); }
   function renderStatsPage() {
     const orders = currentOrders(); const today = orders.filter(o=>new Date(o.date).toDateString()===new Date().toDateString());

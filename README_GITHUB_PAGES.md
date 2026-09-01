@@ -67,3 +67,13 @@ Die Daten werden lokal im Browser des Geräts gespeichert (`localStorage`). Das 
 ## Updates
 
 Wenn du Dateien auf GitHub ersetzt, lädt die PWA beim nächsten Online-Besuch die neue Version nach. Falls Änderungen nicht sofort sichtbar sind, Browser einmal schließen/neu öffnen oder Cache leeren.
+
+
+## Version 1.0.8
+- Optimierte Bezahlansicht mit Schnellbeträgen, Passend-Button, eigenem Nummernblock und Live-Rückgeldanzeige.
+
+
+### Änderungen in 1.0.8
+- Pfandrückgabe ist mit 1,00 € pro Stück vorbelegt, kann bei Bedarf aber manuell geändert werden.
+- Der globale Button „Letzte Bestellung stornieren“ bleibt entfernt.
+- Jede Bestellung in der Historie hat weiterhin einen eigenen Stornieren-Button mit Sicherheitsabfrage.

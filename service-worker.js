@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deckelapp-pwa-v1.0.4-version-menu';
+const CACHE_NAME = 'deckelapp-pwa-v1.0.8-adjustable-deposit-return';
 const ASSETS = [
   './',
   './index.html',
