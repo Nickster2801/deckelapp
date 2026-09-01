@@ -258,7 +258,7 @@
     const a = article ? {...article} : { id: id(), icon:'🥤', name:'', price:0, group: state.data.groups.find(g=>g.name!=='Favoriten')?.name || 'Sonstiges', visible:true, favorite:false, hasDeposit:false, depositPrice:0.25, sortOrder: state.data.articles.length };
     const groups = state.data.groups.filter(g => g.name !== 'Favoriten').map(g => `<option ${g.name===a.group?'selected':''}>${escapeHtml(g.name)}</option>`).join('');
     modal(`<h2>${isNew ? 'Neuer Artikel' : 'Artikel bearbeiten'}</h2><div class="form-grid">
-      <div class="field"><label>Symbol</label><input id="artIcon" value="${escapeAttr(a.icon || '')}" placeholder="Symbol eintragen"></div>
+      <div class="field"><label>Symbol</label><div class="symbol-input-row"><input id="artIcon" value="${escapeAttr(a.icon || '')}" placeholder="Symbol eintragen"><button id="pickSymbol" type="button" class="secondary-button symbol-picker-button"><span id="symbolPreview">${escapeHtml(a.icon || '🥤')}</span><span>Symbol</span></button></div></div>
       <div class="field"><label>Artikelname</label><input id="artName" value="${escapeAttr(a.name)}" placeholder="Name eintragen"></div>
       <div class="field"><label>Preis</label><input id="artPrice" inputmode="decimal" value="${String(Number(a.price).toFixed(2)).replace('.', ',')}"></div>
       <div class="field"><label>Gruppe</label><select id="artGroup">${groups}</select></div>
@@ -269,6 +269,9 @@
       <div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="saveArticle" class="action-button">Speichern</button></div>
     </div>`);
     const toggleDep = () => $('#depRow').classList.toggle('hidden', !$('#artDeposit').checked); toggleDep(); $('#artDeposit').onchange = toggleDep;
+    const syncSymbolPreview = () => { const preview = $('#symbolPreview'); if (preview) preview.textContent = norm($('#artIcon').value) || '🥤'; };
+    $('#artIcon').addEventListener('input', syncSymbolPreview);
+    $('#pickSymbol').onclick = () => openSymbolPicker($('#artIcon'), syncSymbolPreview);
     $('#saveArticle').onclick = () => {
       const name = norm($('#artName').value); if (!name) return toast('Name fehlt');
       Object.assign(a, { icon: norm($('#artIcon').value) || '🥤', name, price: num($('#artPrice').value), group: $('#artGroup').value, visible: $('#artVisible').checked, favorite: $('#artFavorite').checked, hasDeposit: $('#artDeposit').checked, depositPrice: num($('#artDepPrice').value) });
@@ -276,6 +279,27 @@
       save(); closeModal(); renderArticlesPage(); if (state.page === 'orders') renderArticleGroups(); toast('Artikel gespeichert');
     };
   }
+  function openSymbolPicker(targetInput, onSelect) {
+    const groups = [
+      ['Getränke', ['🍺','🍻','🥤','🧃','🧋','☕','🍵','🥛','💧','🫗','🍹','🍸','🍷','🥂','🍾']],
+      ['Essen', ['🍟','🌭','🍔','🍕','🥨','🥪','🌯','🌮','🍗','🥩','🥓','🧀','🥗','🍿','🍰','🧁','🍩','🍪']],
+      ['Sonstiges', ['⭐','❤️','🔥','🎉','🎟️','🎫','🎁','🪙','💶','🧾','🛒','📦','⚡','✅','🔔','🏷️','🥤','🍽️']]
+    ];
+    const picker = document.createElement('div');
+    picker.className = 'symbol-picker-overlay';
+    picker.innerHTML = `<div class="symbol-picker-panel"><div class="symbol-picker-head"><div><div class="symbol-picker-title">Symbol auswählen</div><div class="small-muted">Tippe auf ein Symbol, um es zu übernehmen.</div></div><button type="button" class="icon-button small" id="closeSymbolPicker" aria-label="Symbolauswahl schließen">×</button></div><div class="symbol-picker-scroll">${groups.map(([name, symbols]) => `<div class="symbol-picker-group"><div class="symbol-picker-group-title">${escapeHtml(name)}</div><div class="symbol-grid">${symbols.map(symbol => `<button type="button" class="symbol-choice" data-symbol="${escapeAttr(symbol)}" aria-label="${escapeAttr(symbol)} auswählen">${escapeHtml(symbol)}</button>`).join('')}</div></div>`).join('')}</div></div>`;
+    el.modalHost.appendChild(picker);
+    const closePicker = () => picker.remove();
+    $('#closeSymbolPicker', picker).onclick = closePicker;
+    picker.addEventListener('click', e => { if (e.target === picker) closePicker(); });
+    $$('.symbol-choice', picker).forEach(button => button.onclick = () => {
+      targetInput.value = button.dataset.symbol || '';
+      targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+      if (onSelect) onSelect();
+      closePicker();
+    });
+  }
+
   function switchRow(label, idName, checked) { return `<div class="switch-row"><span>${label}</span><label class="switch"><input id="${idName}" type="checkbox" ${checked?'checked':''}><span class="slider"></span></label></div>`; }
 
   function renderEventsPage() {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deckelapp-pwa-v1.0.0';
+const CACHE_NAME = 'deckelapp-pwa-v1.0.3-symbol-picker';
 const ASSETS = [
   './',
   './index.html',
