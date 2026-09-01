@@ -88,3 +88,21 @@ Wenn du Dateien auf GitHub ersetzt, lädt die PWA beim nächsten Online-Besuch d
 - Abstaende zwischen nebeneinanderliegenden Aktionsbuttons vergroessert.
 - Vertikaler Abstand zwischen aufeinanderfolgenden Button-Zeilen erhoeht.
 - Artikelstamm und Bestellansicht fuer Touch-Bedienung luftiger gestaltet.
+
+## Version 1.1.0
+
+Große Bedienungs- und Verwaltungsoptimierung:
+
+- Artikelkacheln reagieren sichtbar auf Eingaben; langes Drücken entfernt ein Stück.
+- Bestellbutton wird bei gefüllter Bestellung stärker hervorgehoben.
+- Nach Abschluss erscheint eine kurze Erfolgsmeldung mit „Rückgängig“.
+- Artikelstamm zeigt Status für Sichtbarkeit, Favorit und Pfand direkt an.
+- Gruppen und Artikel lassen sich über Pfeile in der Reihenfolge verschieben.
+- Eventwechsel wird bei einer offenen Bestellung abgesichert.
+- Statistik erweitert um Durchschnittsbestellung, verkaufte Artikel und Pfandsaldo.
+- Einstellungen in Darstellung, Bestellung, Daten & Backup, Verwaltungsschutz und App gegliedert.
+- Backup mit Zeitstempel und Anzeige des letzten Backups.
+- Update-Erkennung mit Hinweis „Neue Version verfügbar“.
+- Optionaler Wake-Lock hält den Bildschirm während des Verkaufs aktiv, sofern unterstützt.
+- Vollbild-Schaltfläche für Browserbetrieb, sofern unterstützt.
+- Optionaler lokaler Verwaltungs-PIN für Event, Artikelstamm und Einstellungen.

@@ -24,6 +24,14 @@
       <button id="installButton" class="ghost-button hidden" type="button">Installieren</button>
     </header>
 
+    <div id="updateBanner" class="update-banner hidden" role="status">
+      <div>Neue Version verfügbar</div>
+      <div class="update-banner-actions">
+        <button id="updateLaterButton" class="secondary-button" type="button">Später</button>
+        <button id="updateButton" class="action-button" type="button">Aktualisieren</button>
+      </div>
+    </div>
+
     <aside id="drawer" class="drawer" aria-hidden="true">
       <div class="drawer-header">
         <img src="icons/icon-96.png" alt="" class="drawer-icon">
@@ -41,7 +49,7 @@
         <button data-page="settings" class="drawer-item">Einstellungen</button>
       </nav>
       <div class="drawer-footer">
-        <div class="drawer-version">Version 1.0.10</div>
+        <div id="appVersion" class="drawer-version">Version 1.1.0</div>
         <div>Offline nutzbar · Lokale Speicherung</div>
       </div>
     </aside>

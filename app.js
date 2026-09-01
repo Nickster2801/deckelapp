@@ -9,6 +9,28 @@
   const norm = (s) => String(s || '').trim();
   const num = (v) => Number(String(v ?? '').replace('€', '').replace(',', '.').trim()) || 0;
 
+
+  const APP_VERSION = '1.1.0';
+  const PREFS_KEY = 'deckelapp-prefs-v1';
+  const PIN_ENABLED_KEY = 'deckelapp-admin-pin-enabled';
+  const PIN_HASH_KEY = 'deckelapp-admin-pin-hash';
+  const ADMIN_PAGES = new Set(['events', 'articles', 'settings']);
+
+  function loadPrefs() {
+    try {
+      return { wakeLockEnabled: false, lastBackupAt: '', ...JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') };
+    } catch { return { wakeLockEnabled: false, lastBackupAt: '' }; }
+  }
+  const prefs = loadPrefs();
+  function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch {} }
+  function pinHash(value) {
+    let h = 2166136261;
+    for (const ch of String(value || '')) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+    return (h >>> 0).toString(16);
+  }
+  function pinEnabled() { try { return localStorage.getItem(PIN_ENABLED_KEY) === '1' && !!localStorage.getItem(PIN_HASH_KEY); } catch { return false; } }
+  function pinMatches(value) { try { return pinHash(value) === localStorage.getItem(PIN_HASH_KEY); } catch { return false; } }
+
   const THEME_KEY = 'deckelapp-theme';
   function getTheme() {
     try { return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'; }
@@ -93,14 +115,18 @@
     page: 'orders',
     search: '',
     collapsed: {},
-    installPrompt: null
+    installPrompt: null,
+    adminUnlocked: false,
+    wakeLock: null,
+    swRegistration: null
   };
 
   const el = {
     content: $('#content'), drawer: $('#drawer'), scrim: $('#scrim'), menuButton: $('#menuButton'),
     eventLabel: $('#eventLabel'), drawerEvent: $('#drawerEvent'), orderButton: $('#orderButton'),
     sheet: $('#orderSheet'), closeSheet: $('#closeSheet'), orderLines: $('#orderLines'), modalHost: $('#modalHost'),
-    toast: $('#toast'), installButton: $('#installButton')
+    toast: $('#toast'), installButton: $('#installButton'), appVersion: $('#appVersion'),
+    updateBanner: $('#updateBanner'), updateButton: $('#updateButton'), updateLaterButton: $('#updateLaterButton')
   };
 
   window.addEventListener('beforeinstallprompt', (e) => {
@@ -112,20 +138,67 @@
   });
 
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js').catch(() => {}));
+    window.addEventListener('load', registerServiceWorker);
   }
+
+  async function registerServiceWorker() {
+    try {
+      const reg = await navigator.serviceWorker.register('service-worker.js');
+      state.swRegistration = reg;
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner();
+      reg.addEventListener('updatefound', () => {
+        const worker = reg.installing;
+        if (!worker) return;
+        worker.addEventListener('statechange', () => {
+          if (worker.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner();
+        });
+      });
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        location.reload();
+      });
+    } catch {}
+  }
+  function showUpdateBanner() { if (el.updateBanner) el.updateBanner.classList.remove('hidden'); }
+  function hideUpdateBanner() { if (el.updateBanner) el.updateBanner.classList.add('hidden'); }
+  async function checkForUpdate(showResult = false) {
+    if (!state.swRegistration) {
+      if (showResult) toast('Update-Prüfung derzeit nicht verfügbar');
+      return;
+    }
+    try {
+      await state.swRegistration.update();
+      if (state.swRegistration.waiting) showUpdateBanner();
+      else if (showResult) toast('DeckelApp ist aktuell');
+    } catch { if (showResult) toast('Update-Prüfung fehlgeschlagen'); }
+  }
+  el.updateButton?.addEventListener('click', () => {
+    const waiting = state.swRegistration?.waiting;
+    if (waiting) waiting.postMessage({ type: 'SKIP_WAITING' });
+    else checkForUpdate(true);
+  });
+  el.updateLaterButton?.addEventListener('click', hideUpdateBanner);
 
   el.menuButton.addEventListener('click', openDrawer);
   el.scrim.addEventListener('click', () => { closeDrawer(); closeSheet(); });
   el.orderButton.addEventListener('click', openSheet);
   el.closeSheet.addEventListener('click', closeSheet);
-  $$('.drawer-item').forEach(b => b.addEventListener('click', () => { showPage(b.dataset.page); closeDrawer(); }));
+  $$('.drawer-item').forEach(b => b.addEventListener('click', async () => { await showPage(b.dataset.page); closeDrawer(); }));
 
   function openDrawer() { el.drawer.classList.add('open'); el.scrim.classList.add('open'); el.drawer.setAttribute('aria-hidden', 'false'); }
   function closeDrawer() { el.drawer.classList.remove('open'); if (!el.sheet.classList.contains('open')) el.scrim.classList.remove('open'); el.drawer.setAttribute('aria-hidden', 'true'); }
   function openSheet() { renderOrderSheet(); el.sheet.classList.add('open'); el.scrim.classList.add('open'); el.sheet.setAttribute('aria-hidden', 'false'); }
   function closeSheet() { el.sheet.classList.remove('open'); if (!el.drawer.classList.contains('open')) el.scrim.classList.remove('open'); el.sheet.setAttribute('aria-hidden', 'true'); }
-  function toast(text) { el.toast.textContent = text; el.toast.classList.remove('hidden'); clearTimeout(toast.t); toast.t = setTimeout(() => el.toast.classList.add('hidden'), 1800); }
+  function toast(text, actionLabel = '', action = null, duration = 2300) {
+    clearTimeout(toast.t);
+    el.toast.innerHTML = `<span>${escapeHtml(text)}</span>${actionLabel ? `<button type="button" class="toast-action">${escapeHtml(actionLabel)}</button>` : ''}`;
+    el.toast.classList.remove('hidden');
+    const actionButton = $('.toast-action', el.toast);
+    if (actionButton) actionButton.onclick = () => { clearTimeout(toast.t); el.toast.classList.add('hidden'); action?.(); };
+    toast.t = setTimeout(() => el.toast.classList.add('hidden'), duration);
+  }
   function save() { storage.save(); updateHeader(); updateOrderButton(); }
   function currentOrders() { return state.data.orders.filter(o => !o.eventName || o.eventName === state.data.currentEvent); }
   function orderTotal() { return state.order.reduce((s, x) => s + x.quantity * x.unitPrice, 0); }
@@ -134,18 +207,29 @@
   function updateHeader() {
     el.eventLabel.textContent = state.data.currentEvent;
     el.drawerEvent.textContent = state.data.currentEvent;
+    if (el.appVersion) el.appVersion.textContent = `Version ${APP_VERSION}`;
     $$('.drawer-item').forEach(b => b.classList.toggle('active', b.dataset.page === state.page));
   }
-  function updateOrderButton() { el.orderButton.textContent = `📝 Bestellung anzeigen   ${orderCount()} Artikel | ${fmt(orderTotal())}`; }
+  function updateOrderButton() {
+    const count = orderCount();
+    el.orderButton.textContent = `📝 Bestellung anzeigen   ${count} Artikel | ${fmt(orderTotal())}`;
+    el.orderButton.classList.toggle('has-items', count > 0 || Math.abs(orderTotal()) > 0.0001);
+  }
 
-  function showPage(page) {
-    state.page = page || 'orders'; updateHeader();
-    if (state.page === 'orders') return renderOrdersPage();
-    if (state.page === 'events') return renderEventsPage();
-    if (state.page === 'articles') return renderArticlesPage();
-    if (state.page === 'history') return renderHistoryPage();
-    if (state.page === 'stats') return renderStatsPage();
-    if (state.page === 'settings') return renderSettingsPage();
+  async function showPage(page, skipGuard = false) {
+    const target = page || 'orders';
+    if (!skipGuard && ADMIN_PAGES.has(target) && pinEnabled() && !state.adminUnlocked) {
+      requestAdminPin(() => showPage(target, true));
+      return false;
+    }
+    state.page = target; updateHeader();
+    if (state.page === 'orders') renderOrdersPage();
+    else if (state.page === 'events') renderEventsPage();
+    else if (state.page === 'articles') renderArticlesPage();
+    else if (state.page === 'history') renderHistoryPage();
+    else if (state.page === 'stats') renderStatsPage();
+    else if (state.page === 'settings') renderSettingsPage();
+    return true;
   }
 
   function pageTitle(text) { return `<div class="page-title">${escapeHtml(text)}</div>`; }
@@ -160,7 +244,7 @@
   function renderArticleGroups() {
     const wrap = $('#articles'); if (!wrap) return;
     const q = state.search.trim().toLowerCase();
-    const groups = state.data.groups.map(g => g.name).filter(g => g.toLowerCase() !== 'favoriten');
+    const groups = sortedGroups().map(g => g.name).filter(g => g.toLowerCase() !== 'favoriten');
     if (state.data.articles.some(x => x.favorite && x.visible)) groups.unshift('Favoriten');
     wrap.innerHTML = '';
     for (const group of groups) {
@@ -186,8 +270,36 @@
   function articleTile(article) {
     const qty = state.order.filter(x => !x.isDeposit && !x.isDepositReturn && x.articleName === article.name).reduce((s,x)=>s+x.quantity,0);
     const b = document.createElement('button'); b.type = 'button'; b.className = 'article-tile';
-    b.innerHTML = `${qty ? `<div class="count">${qty}</div>` : ''}<div class="icon">${escapeHtml(article.icon || '🥤')}</div><div class="name">${escapeHtml(article.name)}</div><div class="price">${fmt(article.price)}</div>`;
-    b.addEventListener('click', () => addArticle(article)); return b;
+    b.innerHTML = `${qty ? `<div class="count">${qty}×</div>` : ''}<div class="icon">${escapeHtml(article.icon || '🥤')}</div><div class="name">${escapeHtml(article.name)}</div><div class="price">${fmt(article.price)}</div>`;
+    let timer = null, longPressed = false, startX = 0, startY = 0;
+    b.addEventListener('pointerdown', e => {
+      startX = e.clientX; startY = e.clientY; longPressed = false;
+      timer = setTimeout(() => {
+        longPressed = true;
+        flashTile(b, 'removed-feedback');
+        setTimeout(() => removeOneArticle(article.name), 120);
+      }, 550);
+    });
+    b.addEventListener('pointermove', e => { if (Math.abs(e.clientX-startX) > 12 || Math.abs(e.clientY-startY) > 12) { clearTimeout(timer); timer = null; } });
+    ['pointerup','pointercancel','pointerleave'].forEach(name => b.addEventListener(name, () => { clearTimeout(timer); timer = null; }));
+    b.addEventListener('click', e => {
+      if (longPressed) { longPressed = false; e.preventDefault(); return; }
+      flashTile(b, 'added-feedback');
+      setTimeout(() => addArticle(article), 110);
+    });
+    return b;
+  }
+  function flashTile(tile, cls) { tile.classList.add(cls); setTimeout(() => tile.classList.remove(cls), 260); }
+  function removeOneArticle(articleName) {
+    const line = state.order.find(x => !x.isDeposit && !x.isDepositReturn && x.articleName === articleName);
+    if (!line) { toast('Artikel ist noch nicht auf der Bestellung'); return false; }
+    const dep = state.order.find(x => x.isDeposit && x.articleName === articleName);
+    line.quantity--;
+    if (dep) dep.quantity--;
+    if (line.quantity <= 0) state.order = state.order.filter(x => !(x.articleName === articleName && (!x.isDepositReturn)));
+    else if (dep && dep.quantity <= 0) state.order = state.order.filter(x => x !== dep);
+    changedOrder();
+    return true;
   }
 
   function addArticle(article) {
@@ -272,8 +384,12 @@
     const total = orderTotal();
 
     const finish = (received) => {
-      state.data.orders.push({ id:id(), date: nowIso(), eventName: state.data.currentEvent, note: state.note, received, lines: state.order.map(x => ({...x})) });
-      state.order = []; state.note = ''; save(); closeModal(); closeSheet(); renderArticleGroups(); toast('Bestellung gespeichert');
+      const previousOrder = state.order.map(x => ({...x}));
+      const previousNote = state.note;
+      const savedOrder = { id:id(), date: nowIso(), eventName: state.data.currentEvent, note: previousNote, received, lines: previousOrder.map(x => ({...x})) };
+      state.data.orders.push(savedOrder);
+      state.order = []; state.note = ''; save(); closeModal(); closeSheet(); renderArticleGroups();
+      toast('✓ Bestellung gespeichert', 'Rückgängig', () => undoCompletedOrder(savedOrder, previousOrder, previousNote), 5600);
     };
 
     // Bei einem reinen Null-/Auszahlungsbetrag bleibt die bestehende Logik erhalten,
@@ -373,6 +489,19 @@
     refreshPayment();
   }
 
+
+  function undoCompletedOrder(savedOrder, previousOrder, previousNote) {
+    if (state.order.length) { toast('Neue Bestellung bereits begonnen'); return; }
+    const idx = state.data.orders.findIndex(o => o.id === savedOrder.id);
+    if (idx < 0) { toast('Bestellung wurde bereits geändert'); return; }
+    state.data.orders.splice(idx, 1);
+    state.order = previousOrder.map(x => ({...x}));
+    state.note = previousNote;
+    save();
+    if (state.page === 'orders') renderArticleGroups();
+    toast('Bestellung wiederhergestellt');
+  }
+
   function paymentQuickAmounts(total) {
     const amounts = [];
     const add = (value) => {
@@ -395,21 +524,57 @@
     return amounts.slice(0, 3);
   }
 
+  function sortedGroups() {
+    return state.data.groups.slice().sort((a,b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name, 'de'));
+  }
+  function normalizeGroupOrder() { sortedGroups().forEach((g,i) => g.sortOrder = i); }
+  function normalizeArticleOrder(groupName) {
+    state.data.articles.filter(a => a.group === groupName).sort((a,b)=>(a.sortOrder??0)-(b.sortOrder??0)||a.name.localeCompare(b.name,'de')).forEach((a,i)=>a.sortOrder=i);
+  }
+  function moveGroup(name, direction) {
+    normalizeGroupOrder();
+    const groups = sortedGroups().filter(g => g.name !== 'Favoriten');
+    const current = groups.findIndex(g => g.name === name);
+    const target = current + direction;
+    if (current < 0 || target < 0 || target >= groups.length) return;
+    const a = groups[current], b = groups[target];
+    const tmp = a.sortOrder; a.sortOrder = b.sortOrder; b.sortOrder = tmp;
+    save(); renderArticlesPage();
+    if (state.page === 'orders') renderArticleGroups();
+  }
+  function moveArticle(articleId, direction) {
+    const article = state.data.articles.find(a => a.id === articleId); if (!article) return;
+    normalizeArticleOrder(article.group);
+    const items = state.data.articles.filter(a => a.group === article.group).sort((a,b)=>(a.sortOrder??0)-(b.sortOrder??0));
+    const current = items.findIndex(a => a.id === articleId), target = current + direction;
+    if (current < 0 || target < 0 || target >= items.length) return;
+    const tmp = items[current].sortOrder; items[current].sortOrder = items[target].sortOrder; items[target].sortOrder = tmp;
+    save(); renderArticlesPage();
+  }
+
   function renderArticlesPage() {
     el.content.innerHTML = pageTitle('Artikelstamm') + `<div class="row fill"><button id="newArticle" class="action-button">+ Artikel</button><button id="newGroup" class="secondary-button">+ Gruppe</button></div><div class="row fill"><button id="deleteArticle" class="danger-button">Artikel löschen</button><button id="deleteGroup" class="danger-button">Gruppe löschen</button></div><div id="articleAdmin"></div>`;
     $('#newArticle').onclick = () => editArticle(); $('#newGroup').onclick = addGroup; $('#deleteArticle').onclick = deleteArticle; $('#deleteGroup').onclick = deleteGroup;
     const box = $('#articleAdmin'); box.innerHTML = '';
-    state.data.groups.filter(g => g.name !== 'Favoriten').forEach(g => {
+    const groups = sortedGroups().filter(g => g.name !== 'Favoriten');
+    groups.forEach((g, groupIndex) => {
       const articles = state.data.articles.filter(a => a.group === g.name).sort((a,b)=>(a.sortOrder??0)-(b.sortOrder??0)||a.name.localeCompare(b.name,'de'));
-      if (!articles.length) return;
-      const h = document.createElement('button'); h.type='button'; h.className='group-button'; h.innerHTML = `<span>${escapeHtml(g.name)}</span><span class="group-count">${articles.length}</span>`; box.appendChild(h);
-      articles.forEach(article => {
+      const head = document.createElement('div'); head.className = 'admin-group-head';
+      head.innerHTML = `<div class="group-button"><span>${escapeHtml(g.name)}</span><span class="group-count">${articles.length}</span></div><div class="reorder-controls"><button class="reorder-button" data-group-up="${escapeAttr(g.name)}" ${groupIndex===0?'disabled':''}>▲</button><button class="reorder-button" data-group-down="${escapeAttr(g.name)}" ${groupIndex===groups.length-1?'disabled':''}>▼</button></div>`;
+      box.appendChild(head);
+      if (!articles.length) box.insertAdjacentHTML('beforeend', `<div class="card small-muted">Noch keine Artikel in dieser Gruppe.</div>`);
+      articles.forEach((article, articleIndex) => {
         const card = document.createElement('div'); card.className = 'card';
-        card.innerHTML = `<div class="row"><div style="font-size:28px">${escapeHtml(article.icon||'🥤')}</div><div style="flex:1"><div class="line-title">${escapeHtml(article.name)}</div><div class="line-meta">${fmt(article.price)} · ${escapeHtml(article.group)} · ${article.visible ? 'sichtbar' : 'ausgeblendet'} · ${article.favorite ? 'Favorit' : 'kein Favorit'} · ${article.hasDeposit ? 'Pfand '+fmt(article.depositPrice) : 'ohne Pfand'}</div></div><button class="action-button" data-edit="${article.id}">Bearbeiten</button></div>`;
+        const deposit = article.hasDeposit ? `Pfand ${fmt(article.depositPrice)}` : 'Ohne Pfand';
+        card.innerHTML = `<div class="admin-article-row"><div style="font-size:30px">${escapeHtml(article.icon||'🥤')}</div><div class="admin-article-main"><div class="line-title">${escapeHtml(article.name)}</div><div class="line-meta">${fmt(article.price)} · ${escapeHtml(article.group)}</div><div class="status-chips"><span class="status-chip ${article.visible?'on':''}">${article.visible?'● Sichtbar':'○ Ausgeblendet'}</span><span class="status-chip ${article.favorite?'on':''}">${article.favorite?'★ Favorit':'☆ Kein Favorit'}</span><span class="status-chip ${article.hasDeposit?'on':''}">${article.hasDeposit?'♻ '+escapeHtml(deposit):'○ '+escapeHtml(deposit)}</span></div></div></div><div class="admin-article-actions"><button class="reorder-button" data-article-up="${article.id}" ${articleIndex===0?'disabled':''}>▲</button><button class="reorder-button" data-article-down="${article.id}" ${articleIndex===articles.length-1?'disabled':''}>▼</button><button class="action-button" data-edit="${article.id}">Bearbeiten</button></div>`;
         box.appendChild(card);
       });
     });
     $$('[data-edit]').forEach(b => b.onclick = () => editArticle(state.data.articles.find(a => a.id === b.dataset.edit)));
+    $$('[data-group-up]').forEach(b => b.onclick = () => moveGroup(b.dataset.groupUp, -1));
+    $$('[data-group-down]').forEach(b => b.onclick = () => moveGroup(b.dataset.groupDown, 1));
+    $$('[data-article-up]').forEach(b => b.onclick = () => moveArticle(b.dataset.articleUp, -1));
+    $$('[data-article-down]').forEach(b => b.onclick = () => moveArticle(b.dataset.articleDown, 1));
   }
   function addGroup() {
     modal(`<h2>Neue Gruppe</h2><div class="form-grid"><div class="field"><label>Gruppenname</label><input id="groupName"></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="saveGroup" class="action-button">Speichern</button></div></div>`);
@@ -486,10 +651,32 @@
 
   function renderEventsPage() {
     el.content.innerHTML = pageTitle('Eventverwaltung') + `<div class="card"><div class="small-muted">Aktiv</div><div class="stat-value">${escapeHtml(state.data.currentEvent)}</div></div><button id="addEvent" class="action-button" style="width:100%">+ Neues Event</button><div id="events"></div>`;
-    $('#addEvent').onclick = () => { modal(`<h2>Neues Event</h2><div class="form-grid"><div class="field"><label>Name</label><input id="eventName"></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="saveEvent" class="action-button">Speichern</button></div></div>`); $('#saveEvent').onclick = () => { const name = norm($('#eventName').value); if (!name) return; setCurrentEvent(name); closeModal(); renderEventsPage(); }; };
-    const box = $('#events'); state.data.events.slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).forEach(e => { const b = document.createElement('button'); b.type='button'; b.className=e.name===state.data.currentEvent?'action-button':'secondary-button'; b.style.cssText='width:100%;margin-top:8px;text-align:left'; b.textContent=(e.name===state.data.currentEvent?'✓ ':'')+e.name; b.onclick=()=>{setCurrentEvent(e.name); renderEventsPage();}; box.appendChild(b); });
+    $('#addEvent').onclick = () => {
+      modal(`<h2>Neues Event</h2><div class="form-grid"><div class="field"><label>Name</label><input id="eventName"></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="saveEvent" class="action-button">Speichern</button></div></div>`);
+      $('#saveEvent').onclick = () => {
+        const name = norm($('#eventName').value); if (!name) return;
+        closeModal(); requestEventSwitch(name, () => renderEventsPage());
+      };
+    };
+    const box = $('#events');
+    state.data.events.slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).forEach(e => {
+      const b = document.createElement('button'); b.type='button'; b.className=e.name===state.data.currentEvent?'action-button':'secondary-button'; b.style.cssText='width:100%;margin-top:10px;text-align:left'; b.textContent=(e.name===state.data.currentEvent?'✓ ':'')+e.name;
+      b.onclick=()=>requestEventSwitch(e.name, () => renderEventsPage()); box.appendChild(b);
+    });
   }
-  function setCurrentEvent(name) { state.data.currentEvent = name; if (!state.data.events.some(e=>e.name===name)) state.data.events.push({name,createdAt:nowIso(),isActive:true}); state.data.events.forEach(e=>e.isActive=e.name===name); save(); }
+  function requestEventSwitch(name, after = null) {
+    if (name === state.data.currentEvent) { after?.(); return; }
+    const doSwitch = () => { setCurrentEvent(name); after?.(); };
+    if (!state.order.length && !state.note) { doSwitch(); return; }
+    modal(`<h2>Event wechseln?</h2><div class="card"><div class="line-title">Offene Bestellung vorhanden</div><div class="small-muted">Beim Wechsel von <strong>${escapeHtml(state.data.currentEvent)}</strong> zu <strong>${escapeHtml(name)}</strong> muss die aktuelle Bestellung zuerst verworfen oder weiterbearbeitet werden.</div></div><div class="row fill"><button id="goToOrder" class="secondary-button">Zur Bestellung</button><button id="discardAndSwitch" class="danger-button">Verwerfen & wechseln</button></div>`);
+    $('#goToOrder').onclick = () => { closeModal(); showPage('orders', true); openSheet(); };
+    $('#discardAndSwitch').onclick = () => { state.order=[]; state.note=''; updateOrderButton(); closeModal(); doSwitch(); toast('Event gewechselt'); };
+  }
+  function setCurrentEvent(name) {
+    state.data.currentEvent = name;
+    if (!state.data.events.some(e=>e.name===name)) state.data.events.push({name,createdAt:nowIso(),isActive:true});
+    state.data.events.forEach(e=>e.isActive=e.name===name); save();
+  }
   function renderHistoryPage() {
     const orders = currentOrders().sort((a,b)=>new Date(b.date)-new Date(a.date));
     el.content.innerHTML = pageTitle(`Bestellhistorie · ${state.data.currentEvent}`) + `<div id="hist"></div>`;
@@ -517,39 +704,161 @@
   }
   function totalOf(o) { return (o.lines||[]).reduce((s,l)=>s+Number(l.unitPrice)*Number(l.quantity),0); }
   function renderStatsPage() {
-    const orders = currentOrders(); const today = orders.filter(o=>new Date(o.date).toDateString()===new Date().toDateString());
-    const lines = orders.flatMap(o=>o.lines||[]); const normal = lines.filter(l=>!l.isDeposit&&!l.isDepositReturn); const top = Object.values(normal.reduce((m,l)=>{m[l.name]??={name:l.name,qty:0,total:0}; m[l.name].qty+=Number(l.quantity); m[l.name].total+=Number(l.quantity)*Number(l.unitPrice); return m;},{})).sort((a,b)=>b.qty-a.qty).slice(0,10);
-    el.content.innerHTML = pageTitle(`Statistik · ${state.data.currentEvent}`) + stat('Bestellungen gesamt', orders.length) + stat('Umsatz gesamt', fmt(orders.reduce((s,o)=>s+totalOf(o),0))) + stat('Heute', fmt(today.reduce((s,o)=>s+totalOf(o),0))) + stat('Pfand eingenommen', fmt(lines.filter(l=>l.isDeposit).reduce((s,l)=>s+Number(l.quantity)*Number(l.unitPrice),0))) + stat('Pfand ausgezahlt', fmt(-lines.filter(l=>l.isDepositReturn).reduce((s,l)=>s+Number(l.quantity)*Number(l.unitPrice),0))) + `<div class="group-button">Top-Artikel</div>` + (top.map(t=>`<div class="card">${t.qty}x ${escapeHtml(t.name)} · ${fmt(t.total)}</div>`).join('') || `<div class="card small-muted">Noch keine Verkäufe.</div>`);
+    const orders = currentOrders();
+    const today = orders.filter(o=>new Date(o.date).toDateString()===new Date().toDateString());
+    const lines = orders.flatMap(o=>o.lines||[]);
+    const normal = lines.filter(l=>!l.isDeposit&&!l.isDepositReturn);
+    const revenue = orders.reduce((sum,o)=>sum+totalOf(o),0);
+    const soldQty = normal.reduce((sum,l)=>sum+Number(l.quantity||0),0);
+    const depositIn = lines.filter(l=>l.isDeposit).reduce((sum,l)=>sum+Number(l.quantity)*Number(l.unitPrice),0);
+    const depositOut = -lines.filter(l=>l.isDepositReturn).reduce((sum,l)=>sum+Number(l.quantity)*Number(l.unitPrice),0);
+    const depositBalance = depositIn - depositOut;
+    const avg = orders.length ? revenue / orders.length : 0;
+    const top = Object.values(normal.reduce((m,l)=>{m[l.name]??={name:l.name,qty:0,total:0}; m[l.name].qty+=Number(l.quantity); m[l.name].total+=Number(l.quantity)*Number(l.unitPrice); return m;},{})).sort((a,b)=>b.qty-a.qty).slice(0,5);
+    el.content.innerHTML = pageTitle(`Statistik · ${state.data.currentEvent}`) + `
+      <div class="stats-grid">
+        ${statCard('Bestellungen', String(orders.length))}
+        ${statCard('Ø Bestellung', fmt(avg))}
+        ${statCard('Verkaufte Artikel', String(soldQty))}
+        ${statCard('Umsatz gesamt', fmt(revenue))}
+        ${statCard('Umsatz heute', fmt(today.reduce((sum,o)=>sum+totalOf(o),0)))}
+        ${statCard('Pfandsaldo', fmt(depositBalance))}
+      </div>
+      ${stat('Pfand eingenommen', fmt(depositIn))}
+      ${stat('Pfand zurückgegeben', fmt(depositOut))}
+      <div class="group-button">Top 5 Artikel</div>
+      ${top.map((t,i)=>`<div class="card row"><div style="font-size:20px;font-weight:900;min-width:28px">${i+1}.</div><div style="flex:1"><div class="line-title">${escapeHtml(t.name)}</div><div class="line-meta">${t.qty} verkauft</div></div><div class="stat-value">${fmt(t.total)}</div></div>`).join('') || `<div class="card small-muted">Noch keine Verkäufe.</div>`}`;
   }
+  function statCard(label, value) { return `<div class="card stat-card"><div class="small-muted">${escapeHtml(label)}</div><div class="stat-value">${escapeHtml(value)}</div></div>`; }
   function stat(label, value) { return `<div class="card row"><div style="flex:1" class="small-muted">${escapeHtml(label)}</div><div class="stat-value">${escapeHtml(value)}</div></div>`; }
+
   function renderSettingsPage() {
     const lightMode = getTheme() === 'light';
+    const wakeSupported = 'wakeLock' in navigator;
+    const installed = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    const lastBackup = prefs.lastBackupAt ? new Date(prefs.lastBackupAt).toLocaleString('de-DE') : 'Noch kein Backup';
+    const secure = pinEnabled();
     el.content.innerHTML = pageTitle('Einstellungen') + `
-      <div class="card stack">
-        <div class="switch-row">
-          <div>
-            <div>Heller Modus</div>
-            <div class="small-muted">Aus = Darkmode · Ein = heller Modus</div>
-          </div>
-          <label class="switch" aria-label="Hellen Modus umschalten">
-            <input id="lightModeToggle" type="checkbox" ${lightMode ? 'checked' : ''}>
-            <span class="slider"></span>
-          </label>
+      <section class="settings-section">
+        <div class="settings-section-title">Darstellung</div>
+        <div class="card settings-card">
+          <div class="switch-row"><div><div>Heller Modus</div><div class="small-muted">Aus = Darkmode · Ein = heller Modus</div></div><label class="switch"><input id="lightModeToggle" type="checkbox" ${lightMode?'checked':''}><span class="slider"></span></label></div>
         </div>
-        <button id="exportData" class="secondary-button">Daten exportieren</button>
-        <button id="importData" class="secondary-button">Daten importieren</button>
-        <input id="importFile" type="file" accept="application/json" class="hidden">
-        <button id="resetData" class="danger-button">Demo-Daten zurücksetzen</button>
-        <div class="small-muted">Alle Daten werden nur lokal in diesem Browser/Gerät gespeichert. Die App ist nach dem ersten Laden offline nutzbar.</div>
-      </div>`;
-    $('#lightModeToggle').onchange = e => {
-      setTheme(e.target.checked ? 'light' : 'dark');
-      toast(e.target.checked ? 'Heller Modus aktiviert' : 'Darkmode aktiviert');
-    };
-    $('#exportData').onclick = () => { const blob = new Blob([JSON.stringify(state.data,null,2)], {type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='deckelapp-daten.json'; a.click(); URL.revokeObjectURL(url); };
+      </section>
+      <section class="settings-section">
+        <div class="settings-section-title">Bestellung</div>
+        <div class="card settings-card">
+          <div class="switch-row"><div><div>Bildschirm eingeschaltet lassen</div><div class="small-muted">Praktisch während des Verkaufs. ${wakeSupported?'':'Von diesem Browser nicht unterstützt.'}</div></div><label class="switch"><input id="wakeLockToggle" type="checkbox" ${prefs.wakeLockEnabled?'checked':''} ${wakeSupported?'':'disabled'}><span class="slider"></span></label></div>
+          <div class="small-muted">Tipp: Artikel kurz antippen = hinzufügen · Artikel etwa 0,5 s gedrückt halten = ein Stück entfernen.</div>
+        </div>
+      </section>
+      <section class="settings-section">
+        <div class="settings-section-title">Daten & Backup</div>
+        <div class="card settings-card">
+          <div class="settings-status"><div><div>Letztes Backup</div><div class="small-muted">Sichert Artikel, Gruppen, Events und Historie.</div></div><span class="status-pill ${prefs.lastBackupAt?'ok':''}">${escapeHtml(lastBackup)}</span></div>
+          <button id="exportData" class="action-button">Backup erstellen</button>
+          <button id="importData" class="secondary-button">Backup wiederherstellen</button>
+          <input id="importFile" type="file" accept="application/json" class="hidden">
+          <button id="resetData" class="danger-button">Demo-Daten zurücksetzen</button>
+        </div>
+      </section>
+      <section class="settings-section">
+        <div class="settings-section-title">Verwaltungsschutz</div>
+        <div class="card settings-card">
+          <div class="switch-row"><div><div>PIN für Verwaltung</div><div class="small-muted">Schützt Event, Artikelstamm und Einstellungen. Bestellungen bleiben frei zugänglich.</div></div><label class="switch"><input id="pinToggle" type="checkbox" ${secure?'checked':''}><span class="slider"></span></label></div>
+          ${secure ? `<button id="lockAdminNow" class="secondary-button">Verwaltung jetzt sperren</button>` : ''}
+        </div>
+      </section>
+      <section class="settings-section">
+        <div class="settings-section-title">App</div>
+        <div class="card settings-card">
+          <div class="settings-status"><span>Version</span><span class="status-pill ok">${APP_VERSION}</span></div>
+          <div class="settings-status"><span>Verbindung</span><span class="status-pill ${navigator.onLine?'ok':''}">${navigator.onLine?'Online · Offline bereit':'Offline'}</span></div>
+          <div class="settings-status"><span>Anzeige</span><span class="status-pill ${installed?'ok':''}">${installed?'Installierte PWA':'Browser'}</span></div>
+          <button id="checkUpdate" class="secondary-button">Nach Update suchen</button>
+          ${document.documentElement.requestFullscreen ? `<button id="fullscreenButton" class="secondary-button">Vollbild öffnen</button>` : ''}
+          <div class="small-muted">Alle Verkaufsdaten werden lokal auf diesem Gerät gespeichert. Nach dem ersten vollständigen Laden ist die App offline nutzbar.</div>
+        </div>
+      </section>`;
+
+    $('#lightModeToggle').onchange = e => { setTheme(e.target.checked ? 'light' : 'dark'); toast(e.target.checked ? 'Heller Modus aktiviert' : 'Darkmode aktiviert'); };
+    $('#wakeLockToggle').onchange = async e => { prefs.wakeLockEnabled = e.target.checked; savePrefs(); await syncWakeLock(true); };
+    $('#exportData').onclick = createBackup;
     $('#importData').onclick = () => $('#importFile').click();
-    $('#importFile').onchange = async e => { const f=e.target.files?.[0]; if(!f)return; try{ state.data=JSON.parse(await f.text()); save(); showPage('orders'); toast('Daten importiert'); }catch{toast('Import fehlgeschlagen');} };
-    $('#resetData').onclick = () => { if(confirm('Lokale Daten wirklich zurücksetzen?')) { state.data = structuredClone(defaults); state.order=[]; state.note=''; save(); showPage('orders'); toast('Zurückgesetzt'); } };
+    $('#importFile').onchange = restoreBackup;
+    $('#resetData').onclick = () => { if(confirm('Lokale Verkaufsdaten wirklich zurücksetzen?')) { state.data = structuredClone(defaults); state.order=[]; state.note=''; save(); showPage('orders', true); toast('Zurückgesetzt'); } };
+    $('#pinToggle').onchange = e => e.target.checked ? enablePin(e.target) : disablePin(e.target);
+    $('#lockAdminNow')?.addEventListener('click', () => { state.adminUnlocked=false; showPage('orders', true); toast('Verwaltung gesperrt'); });
+    $('#checkUpdate').onclick = () => checkForUpdate(true);
+    $('#fullscreenButton')?.addEventListener('click', async () => { try { await document.documentElement.requestFullscreen(); } catch { toast('Vollbild konnte nicht geöffnet werden'); } });
+  }
+
+  function createBackup() {
+    const backup = { deckelAppBackup: true, appVersion: APP_VERSION, exportedAt: nowIso(), data: state.data };
+    const blob = new Blob([JSON.stringify(backup,null,2)], {type:'application/json'});
+    const url=URL.createObjectURL(blob); const link=document.createElement('a');
+    const stamp = new Date().toISOString().slice(0,19).replaceAll(':','-');
+    link.href=url; link.download=`deckelapp-backup-${stamp}.json`; link.click(); URL.revokeObjectURL(url);
+    prefs.lastBackupAt = nowIso(); savePrefs(); renderSettingsPage(); toast('Backup erstellt');
+  }
+  async function restoreBackup(e) {
+    const file=e.target.files?.[0]; if(!file)return;
+    try {
+      const raw=JSON.parse(await file.text());
+      const data = raw?.deckelAppBackup ? raw.data : raw;
+      if (!data || !Array.isArray(data.groups) || !Array.isArray(data.articles) || !Array.isArray(data.orders)) throw new Error('invalid');
+      state.data = { groups:data.groups, articles:data.articles, events:Array.isArray(data.events)&&data.events.length?data.events:structuredClone(defaults.events), currentEvent:data.currentEvent||'Standard-Event', orders:data.orders };
+      save(); showPage('orders', true); toast('Backup wiederhergestellt');
+    } catch { toast('Backup konnte nicht gelesen werden'); }
+  }
+
+  async function syncWakeLock(showMessage = false) {
+    if (!prefs.wakeLockEnabled || document.visibilityState !== 'visible') {
+      try { await state.wakeLock?.release(); } catch {}
+      state.wakeLock = null; return;
+    }
+    if (!('wakeLock' in navigator)) { if (showMessage) toast('Wake-Lock wird nicht unterstützt'); return; }
+    try {
+      if (!state.wakeLock) {
+        state.wakeLock = await navigator.wakeLock.request('screen');
+        state.wakeLock.addEventListener('release', () => { state.wakeLock = null; });
+      }
+      if (showMessage) toast('Bildschirm bleibt eingeschaltet');
+    } catch { if (showMessage) toast('Bildschirm konnte nicht wach gehalten werden'); }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') syncWakeLock(false);
+    else { state.adminUnlocked = false; syncWakeLock(false); }
+  });
+  window.addEventListener('online', () => { if (state.page==='settings') renderSettingsPage(); });
+  window.addEventListener('offline', () => { if (state.page==='settings') renderSettingsPage(); });
+
+  function requestAdminPin(onSuccess) {
+    modal(`<h2>Verwaltung entsperren</h2><div class="form-grid"><div class="field"><label>PIN</label><input id="adminPinEntry" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="PIN eingeben"></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="unlockAdmin" class="action-button">Entsperren</button></div></div>`);
+    const submit = () => {
+      const value = $('#adminPinEntry').value;
+      if (!pinMatches(value)) { toast('PIN ist nicht korrekt'); return; }
+      state.adminUnlocked = true; closeModal(); onSuccess?.();
+    };
+    $('#unlockAdmin').onclick = submit; $('#adminPinEntry').addEventListener('keydown',e=>{if(e.key==='Enter')submit();}); setTimeout(()=>$('#adminPinEntry')?.focus(),50);
+  }
+  function enablePin(toggle) {
+    modal(`<h2>Verwaltungs-PIN festlegen</h2><div class="form-grid"><div class="field"><label>Neue PIN (4–6 Ziffern)</label><input id="newPin1" type="password" inputmode="numeric" maxlength="6"></div><div class="field"><label>PIN wiederholen</label><input id="newPin2" type="password" inputmode="numeric" maxlength="6"></div><div class="row fill"><button id="cancelPinEnable" class="secondary-button">Abbrechen</button><button id="savePin" class="action-button">PIN speichern</button></div></div>`);
+    $('#cancelPinEnable').onclick=()=>{toggle.checked=false;closeModal();};
+    $('#savePin').onclick=()=>{
+      const p1=$('#newPin1').value,p2=$('#newPin2').value;
+      if(!/^\d{4,6}$/.test(p1)) return toast('PIN muss 4–6 Ziffern haben');
+      if(p1!==p2) return toast('PINs stimmen nicht überein');
+      localStorage.setItem(PIN_HASH_KEY,pinHash(p1)); localStorage.setItem(PIN_ENABLED_KEY,'1'); state.adminUnlocked=true; closeModal(); renderSettingsPage(); toast('PIN-Schutz aktiviert');
+    };
+  }
+  function disablePin(toggle) {
+    modal(`<h2>PIN-Schutz deaktivieren</h2><div class="form-grid"><div class="field"><label>Aktuelle PIN</label><input id="disablePinEntry" type="password" inputmode="numeric" maxlength="6"></div><div class="row fill"><button id="cancelPinDisable" class="secondary-button">Abbrechen</button><button id="confirmPinDisable" class="danger-button">Deaktivieren</button></div></div>`);
+    $('#cancelPinDisable').onclick=()=>{toggle.checked=true;closeModal();};
+    $('#confirmPinDisable').onclick=()=>{
+      if(!pinMatches($('#disablePinEntry').value)) return toast('PIN ist nicht korrekt');
+      localStorage.removeItem(PIN_HASH_KEY); localStorage.removeItem(PIN_ENABLED_KEY); state.adminUnlocked=false; closeModal(); renderSettingsPage(); toast('PIN-Schutz deaktiviert');
+    };
   }
 
   function modal(html) { el.modalHost.innerHTML = `<div class="modal">${html}</div>`; el.modalHost.classList.remove('hidden'); $$('[data-close]', el.modalHost).forEach(b => b.onclick = closeModal); }
@@ -557,5 +866,5 @@
   function escapeHtml(s) { return String(s ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
   function escapeAttr(s) { return escapeHtml(s); }
 
-  updateHeader(); updateOrderButton(); showPage('orders');
+  updateHeader(); updateOrderButton(); showPage('orders'); syncWakeLock(false);
 })();

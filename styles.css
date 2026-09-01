@@ -197,3 +197,53 @@ html[data-theme="light"] .topbar { box-shadow: 0 4px 18px rgba(25,35,52,.05); }
 .symbol-choice:active,
 .payment-keypad button:active,
 .payment-quick-button:active { color: #fff; }
+
+/* Bedienungs- und Verwaltungsoptimierungen ab Version 1.1.0 */
+.article-tile { transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease, background .12s ease; }
+.article-tile:active { transform: scale(.975); }
+.article-tile.added-feedback { border-color: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 28%, transparent); }
+.article-tile.removed-feedback { border-color: var(--dangerText); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dangerText) 24%, transparent); }
+.bottom-order-button { transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease; }
+.bottom-order-button:not(.has-items) { opacity: .78; }
+.bottom-order-button.has-items { box-shadow: 0 20px 48px color-mix(in srgb, var(--accent) 38%, transparent); transform: translateY(-1px); }
+@media (min-width:740px) { .bottom-order-button.has-items { transform: translateX(-50%) translateY(-1px); } }
+
+.toast { max-width: calc(100vw - 24px); display: flex; align-items: center; gap: 10px; white-space: normal; }
+.toast-action { min-height: 36px; border: 0; border-radius: 999px; padding: 0 12px; background: var(--accent); color: #fff; font-weight: 900; }
+
+.update-banner { position: sticky; top: 64px; z-index: 19; margin: 8px 12px 0; padding: 10px 12px; border-radius: 16px; border: 1px solid var(--line); background: var(--card); box-shadow: 0 12px 26px var(--card-shadow); display: flex; align-items: center; justify-content: space-between; gap: 10px; font-weight: 900; }
+.update-banner-actions { display: flex; gap: 8px; }
+.update-banner-actions button { min-height: 40px; padding: 6px 10px; }
+
+.settings-section { margin-bottom: 14px; }
+.settings-section-title { color: var(--gold); font-size: 18px; font-weight: 900; margin: 4px 2px 8px; }
+.settings-card { display: grid; gap: 10px; }
+.settings-status { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.settings-status:first-child { border-top: 0; }
+.status-pill { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card2); color: var(--muted); font-size: 12px; font-weight: 900; }
+.status-pill.ok { background: color-mix(in srgb, var(--ok) 16%, var(--card)); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); }
+
+.admin-group-head { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; align-items: center; margin-top: 12px; }
+.admin-group-head .group-button { margin: 0; }
+.reorder-controls { display: flex; gap: 6px; }
+.reorder-button { width: 44px; height: 44px; border-radius: 13px; border: 1px solid var(--line); background: var(--card2); color: var(--text); font-weight: 900; font-size: 18px; }
+.admin-article-row { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 10px; align-items: start; }
+.admin-article-main { min-width: 0; }
+.admin-article-actions { margin-top: 10px; display: grid; grid-template-columns: auto auto minmax(120px,1fr); gap: 8px; }
+.status-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.status-chip { min-height: 26px; display: inline-flex; align-items: center; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--card2); color: var(--muted); font-size: 12px; font-weight: 800; }
+.status-chip.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+
+.stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-bottom: 12px; }
+.stat-card { margin: 0; min-height: 94px; display: flex; flex-direction: column; justify-content: center; }
+.stat-card .stat-value { margin-top: 4px; }
+
+.pin-keypad { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; margin-top: 10px; }
+.pin-keypad button { min-height: 54px; border-radius: 14px; border: 1px solid var(--line); background: var(--card2); color: var(--text); font-size: 20px; font-weight: 900; }
+
+@media (max-width: 560px) {
+  .update-banner { align-items: stretch; flex-direction: column; }
+  .update-banner-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .admin-article-actions { grid-template-columns: 44px 44px minmax(0,1fr); }
+}
