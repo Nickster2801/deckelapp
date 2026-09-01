@@ -77,3 +77,14 @@ Wenn du Dateien auf GitHub ersetzt, lädt die PWA beim nächsten Online-Besuch d
 - Pfandrückgabe ist mit 1,00 € pro Stück vorbelegt, kann bei Bedarf aber manuell geändert werden.
 - Der globale Button „Letzte Bestellung stornieren“ bleibt entfernt.
 - Jede Bestellung in der Historie hat weiterhin einen eigenen Stornieren-Button mit Sicherheitsabfrage.
+
+
+## Version 1.0.9
+- Umschaltbarer Darkmode/Hellmodus unter Einstellungen.
+- Theme-Auswahl wird lokal auf dem Gerät gespeichert.
+
+
+## Version 1.0.10
+- Abstaende zwischen nebeneinanderliegenden Aktionsbuttons vergroessert.
+- Vertikaler Abstand zwischen aufeinanderfolgenden Button-Zeilen erhoeht.
+- Artikelstamm und Bestellansicht fuer Touch-Bedienung luftiger gestaltet.

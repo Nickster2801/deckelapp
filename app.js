@@ -9,6 +9,24 @@
   const norm = (s) => String(s || '').trim();
   const num = (v) => Number(String(v ?? '').replace('€', '').replace(',', '.').trim()) || 0;
 
+  const THEME_KEY = 'deckelapp-theme';
+  function getTheme() {
+    try { return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'; }
+    catch { return 'dark'; }
+  }
+  function applyTheme(theme) {
+    const next = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', next === 'light' ? '#F4F6FB' : '#07111F');
+  }
+  function setTheme(theme) {
+    const next = theme === 'light' ? 'light' : 'dark';
+    try { localStorage.setItem(THEME_KEY, next); } catch {}
+    applyTheme(next);
+  }
+  applyTheme(getTheme());
+
   const defaults = {
     groups: [
       { name: 'Favoriten', sortOrder: 0 },
@@ -505,7 +523,29 @@
   }
   function stat(label, value) { return `<div class="card row"><div style="flex:1" class="small-muted">${escapeHtml(label)}</div><div class="stat-value">${escapeHtml(value)}</div></div>`; }
   function renderSettingsPage() {
-    el.content.innerHTML = pageTitle('Einstellungen') + `<div class="card stack"><button id="exportData" class="secondary-button">Daten exportieren</button><button id="importData" class="secondary-button">Daten importieren</button><input id="importFile" type="file" accept="application/json" class="hidden"><button id="resetData" class="danger-button">Demo-Daten zurücksetzen</button><div class="small-muted">Alle Daten werden nur lokal in diesem Browser/Gerät gespeichert. Die App ist nach dem ersten Laden offline nutzbar.</div></div>`;
+    const lightMode = getTheme() === 'light';
+    el.content.innerHTML = pageTitle('Einstellungen') + `
+      <div class="card stack">
+        <div class="switch-row">
+          <div>
+            <div>Heller Modus</div>
+            <div class="small-muted">Aus = Darkmode · Ein = heller Modus</div>
+          </div>
+          <label class="switch" aria-label="Hellen Modus umschalten">
+            <input id="lightModeToggle" type="checkbox" ${lightMode ? 'checked' : ''}>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <button id="exportData" class="secondary-button">Daten exportieren</button>
+        <button id="importData" class="secondary-button">Daten importieren</button>
+        <input id="importFile" type="file" accept="application/json" class="hidden">
+        <button id="resetData" class="danger-button">Demo-Daten zurücksetzen</button>
+        <div class="small-muted">Alle Daten werden nur lokal in diesem Browser/Gerät gespeichert. Die App ist nach dem ersten Laden offline nutzbar.</div>
+      </div>`;
+    $('#lightModeToggle').onchange = e => {
+      setTheme(e.target.checked ? 'light' : 'dark');
+      toast(e.target.checked ? 'Heller Modus aktiviert' : 'Darkmode aktiviert');
+    };
     $('#exportData').onclick = () => { const blob = new Blob([JSON.stringify(state.data,null,2)], {type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='deckelapp-daten.json'; a.click(); URL.revokeObjectURL(url); };
     $('#importData').onclick = () => $('#importFile').click();
     $('#importFile').onchange = async e => { const f=e.target.files?.[0]; if(!f)return; try{ state.data=JSON.parse(await f.text()); save(); showPage('orders'); toast('Daten importiert'); }catch{toast('Import fehlgeschlagen');} };

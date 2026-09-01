@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deckelapp-pwa-v1.0.8-adjustable-deposit-return';
+const CACHE_NAME = 'deckelapp-pwa-v1.0.10-button-spacing';
 const ASSETS = [
   './',
   './index.html',
