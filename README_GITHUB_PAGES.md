@@ -148,3 +148,13 @@ Hinweis: Auf Smartphones kann der Browser das zweite Fenster als neuen Tab öffn
 - Kundenanzeige nutzt die verfügbare Bildschirmfläche automatisch und ohne vertikales Scrollen.
 - Je nach Anzahl der Positionen werden Spaltenzahl und Darstellungsdichte automatisch angepasst.
 - Kopf- und Fußbereich wurden kompakter gestaltet, damit mehr Platz für die Bestellung bleibt.
+
+
+## Version 1.1.6 – Kundenanzeige als kompakte Liste
+
+- Kundenanzeige auf kompakte Produktzeilen umgestellt (Variante 1).
+- Header bleibt wie bisher links ausgerichtet: Logo, Bezeichnung und Event links.
+- Pfand erscheint eingerückt direkt unter dem zugehörigen Artikel.
+- Produktpreis und Pfandsumme werden getrennt rechts angezeigt; Gesamtbetrag bleibt unten groß sichtbar.
+- Artikelsymbole werden aus dem Artikelstamm in die Kundenanzeige übernommen.
+- Keine Scrollanzeige; bei vielen Positionen verdichtet sich die Darstellung automatisch.

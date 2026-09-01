@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deckelapp-pwa-v1.1.5-customer-compact';
+const CACHE_NAME = 'deckelapp-pwa-v1.1.6-customer-list';
 const ASSETS = [
   './',
   './index.html',

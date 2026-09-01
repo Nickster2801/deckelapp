@@ -10,7 +10,7 @@
   const num = (v) => Number(String(v ?? '').replace('€', '').replace(',', '.').trim()) || 0;
 
 
-  const APP_VERSION = '1.1.5';
+  const APP_VERSION = '1.1.6';
   const PREFS_KEY = 'deckelapp-prefs-v1';
   const PIN_ENABLED_KEY = 'deckelapp-admin-pin-enabled';
   const PIN_HASH_KEY = 'deckelapp-admin-pin-hash';
@@ -175,14 +175,20 @@
       eventName: state.data.currentEvent,
       count: orderCount(),
       total: orderTotal(),
-      order: state.order.map(line => ({
-        name: line.name,
-        articleName: line.articleName,
-        quantity: Number(line.quantity || 0),
-        unitPrice: Number(line.unitPrice || 0),
-        isDeposit: !!line.isDeposit,
-        isDepositReturn: !!line.isDepositReturn
-      })),
+      order: state.order.map(line => {
+        const article = !line.isDeposit && !line.isDepositReturn
+          ? state.data.articles.find(a => a.name === (line.articleName || line.name))
+          : null;
+        return {
+          name: line.name,
+          articleName: line.articleName,
+          icon: article?.icon || (line.isDepositReturn ? '↩️' : ''),
+          quantity: Number(line.quantity || 0),
+          unitPrice: Number(line.unitPrice || 0),
+          isDeposit: !!line.isDeposit,
+          isDepositReturn: !!line.isDepositReturn
+        };
+      }),
       lastChange: state.customerLastChange,
       changeSeq: state.customerChangeSeq,
       appearance: {

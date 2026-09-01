@@ -58,10 +58,9 @@
 
       if (line.isDepositReturn) {
         result.push({
-          kind: 'return',
-          name: line.name || 'Pfand zurück',
-          quantity: Number(line.quantity || 0),
-          unitPrice: Number(line.unitPrice || 0),
+          kind: 'return', icon: line.icon || '↩️', name: line.name || 'Pfand zurück',
+          quantity: Number(line.quantity || 0), unitPrice: Number(line.unitPrice || 0),
+          productTotal: Number(line.quantity || 0) * Number(line.unitPrice || 0),
           total: Number(line.quantity || 0) * Number(line.unitPrice || 0)
         });
         return;
@@ -83,26 +82,21 @@
 
       const productQty = Number(line.quantity || 0);
       const productPrice = Number(line.unitPrice || 0);
+      const productTotal = productQty * productPrice;
       result.push({
-        kind: 'product',
-        name: line.name || key,
-        quantity: productQty,
-        unitPrice: productPrice,
-        depositQty,
-        depositPrice,
-        depositTotal,
-        total: productQty * productPrice + depositTotal
+        kind: 'product', icon: line.icon || '🧾', name: line.name || key,
+        quantity: productQty, unitPrice: productPrice, productTotal,
+        depositQty, depositPrice, depositTotal, total: productTotal + depositTotal
       });
     });
 
     order.forEach((line, index) => {
       if (!line.isDeposit || line.isDepositReturn || usedDeposits.has(index)) return;
+      const qty = Number(line.quantity || 0);
+      const price = Number(line.unitPrice || 0);
       result.push({
-        kind: 'deposit',
-        name: line.articleName ? `Pfand · ${line.articleName}` : 'Pfand',
-        quantity: Number(line.quantity || 0),
-        unitPrice: Number(line.unitPrice || 0),
-        total: Number(line.quantity || 0) * Number(line.unitPrice || 0)
+        kind: 'deposit', icon: '↳', name: line.articleName ? `Pfand · ${line.articleName}` : 'Pfand',
+        quantity: qty, unitPrice: price, productTotal: qty * price, total: qty * price
       });
     });
 
@@ -112,32 +106,14 @@
   function fitLayout(count) {
     if (!count) {
       document.documentElement.dataset.density = 'normal';
-      document.documentElement.style.setProperty('--terminal-cols', 1);
-      document.documentElement.style.setProperty('--terminal-rows', 1);
       return;
     }
-
-    const width = Math.max(window.innerWidth || 0, 320);
     const height = Math.max(window.innerHeight || 0, 320);
-    const estimatedChrome = width <= 600 ? 132 : 170;
-    const usableHeight = Math.max(150, height - estimatedChrome);
-    const targetRowHeight = width <= 600 ? 70 : 92;
-    const maxRows = Math.max(2, Math.floor(usableHeight / targetRowHeight));
-    let cols = Math.max(1, Math.ceil(count / maxRows));
-    const maxCols = width < 700 ? 2 : width < 1200 ? 3 : 4;
-    cols = Math.min(cols, maxCols);
-    let rows = Math.ceil(count / cols);
-
-    while (rows > maxRows && cols < maxCols) {
-      cols += 1;
-      rows = Math.ceil(count / cols);
-    }
-
-    const rowHeight = usableHeight / Math.max(rows, 1);
-    const density = rowHeight < 52 ? 'dense' : rowHeight < 75 ? 'compact' : 'normal';
-    document.documentElement.dataset.density = density;
-    document.documentElement.style.setProperty('--terminal-cols', cols);
-    document.documentElement.style.setProperty('--terminal-rows', rows);
+    const width = Math.max(window.innerWidth || 0, 320);
+    const chrome = width <= 600 ? 118 : 152;
+    const available = Math.max(140, height - chrome);
+    const perItem = available / count;
+    document.documentElement.dataset.density = perItem < 43 ? 'dense' : perItem < 66 ? 'compact' : 'normal';
   }
 
   function render(snapshot) {
@@ -156,26 +132,24 @@
     fitLayout(order.length);
 
     el.lines.innerHTML = order.map(line => {
+      const icon = escapeHtml(line.icon || (line.kind === 'return' ? '↩️' : '🧾'));
       if (line.kind === 'product') {
-        const depositText = line.depositQty > 0
-          ? `<span class="terminal-line-deposit"> · Pfand ${fmt(line.depositPrice)}${line.depositQty !== line.quantity ? ` × ${line.depositQty}` : ''}</span>`
+        const deposit = line.depositQty > 0
+          ? `<div class="terminal-line-deposit">Pfand ${line.depositQty} × ${fmt(line.depositPrice)}</div><div class="terminal-line-deposit-total">${fmt(line.depositTotal)}</div>`
           : '';
         return `<article class="terminal-line">
-          <div class="terminal-line-main">
-            <div class="terminal-line-name">${escapeHtml(line.name)}</div>
-            <div class="terminal-line-meta">${line.quantity} × ${fmt(line.unitPrice)}${depositText}</div>
-          </div>
-          <div class="terminal-line-total">${fmt(line.total)}</div>
+          <div class="terminal-line-icon">${icon}</div>
+          <div class="terminal-line-main"><span class="terminal-line-qty">${line.quantity}×</span><span class="terminal-line-name">${escapeHtml(line.name)}</span></div>
+          <div class="terminal-line-product-total">${fmt(line.productTotal)}</div>
+          ${deposit}
         </article>`;
       }
 
-      const cls = line.kind === 'return' ? 'return' : 'deposit';
+      const cls = line.kind === 'return' ? 'return' : 'deposit-only';
       return `<article class="terminal-line ${cls}">
-        <div class="terminal-line-main">
-          <div class="terminal-line-name">${escapeHtml(line.name)}</div>
-          <div class="terminal-line-meta">${line.quantity} × ${fmt(line.unitPrice)}</div>
-        </div>
-        <div class="terminal-line-total">${fmt(line.total)}</div>
+        <div class="terminal-line-icon">${icon}</div>
+        <div class="terminal-line-main"><span class="terminal-line-qty">${line.quantity}×</span><span class="terminal-line-name">${escapeHtml(line.name)}</span></div>
+        <div class="terminal-line-product-total">${fmt(line.productTotal)}</div>
       </article>`;
     }).join('');
   }
@@ -198,9 +172,7 @@
     try { render(JSON.parse(event.newValue)); } catch {}
   });
 
-  window.addEventListener('resize', () => {
-    if (lastSnapshot) render(lastSnapshot);
-  });
+  window.addEventListener('resize', () => { if (lastSnapshot) render(lastSnapshot); });
 
   try {
     const cached = JSON.parse(localStorage.getItem(STATE_KEY) || 'null');
