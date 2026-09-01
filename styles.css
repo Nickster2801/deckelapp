@@ -58,6 +58,7 @@ button { touch-action: manipulation; }
 .drawer-item { min-height: 52px; border-radius: 16px; border: 1px solid var(--line); background: var(--card2); color: #fff; text-align: left; padding: 0 14px; font-weight: 900; }
 .drawer-item.active { background: var(--accent); }
 .drawer-footer { margin-top: auto; color: var(--muted); font-size: 13px; padding: 12px 4px 0; }
+.drawer-version { color: #fff; font-weight: 800; margin-bottom: 4px; }
 .bottom-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; max-height: min(82vh, 780px); background: #091426; border: 1px solid var(--line); border-radius: 24px 24px 0 0; transform: translateY(105%); transition: transform .22s ease; box-shadow: 0 -20px 60px rgba(0,0,0,.5); display: flex; flex-direction: column; padding-bottom: var(--safe-bottom); }
 .bottom-sheet.open { transform: translateY(0); }
 .sheet-handle { width: 52px; height: 5px; border-radius: 99px; background: var(--line); margin: 10px auto 4px; }
