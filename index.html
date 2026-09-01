@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07111F">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="DeckelApp">
+  <title>DeckelApp</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <header class="topbar">
+      <button id="menuButton" class="icon-button" type="button" aria-label="Menü öffnen">☰</button>
+      <div class="brand-wrap">
+        <div class="brand">DeckelApp</div>
+        <div id="eventLabel" class="event-label">Standard-Event</div>
+      </div>
+      <button id="installButton" class="ghost-button hidden" type="button">Installieren</button>
+    </header>
+
+    <aside id="drawer" class="drawer" aria-hidden="true">
+      <div class="drawer-header">
+        <img src="icons/icon-96.png" alt="" class="drawer-icon">
+        <div>
+          <div class="drawer-title">DeckelApp</div>
+          <div id="drawerEvent" class="drawer-subtitle">Standard-Event</div>
+        </div>
+      </div>
+      <nav class="drawer-nav">
+        <button data-page="orders" class="drawer-item active">Bestellungen</button>
+        <button data-page="events" class="drawer-item">Event</button>
+        <button data-page="articles" class="drawer-item">Artikelstamm</button>
+        <button data-page="history" class="drawer-item">Historie</button>
+        <button data-page="stats" class="drawer-item">Statistik</button>
+        <button data-page="settings" class="drawer-item">Einstellungen</button>
+      </nav>
+      <div class="drawer-footer">Offline nutzbar · Lokale Speicherung</div>
+    </aside>
+    <div id="scrim" class="scrim"></div>
+
+    <main id="content" class="content"></main>
+
+    <button id="orderButton" class="bottom-order-button" type="button">📝 Bestellung anzeigen&nbsp;&nbsp; 0 Artikel | 0,00 €</button>
+
+    <section id="orderSheet" class="bottom-sheet" aria-hidden="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-header">
+        <h2>Aktuelle Bestellung</h2>
+        <button id="closeSheet" class="icon-button small" type="button">×</button>
+      </div>
+      <div id="orderLines" class="sheet-content"></div>
+    </section>
+
+    <div id="modalHost" class="modal-host hidden"></div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
