@@ -78,7 +78,7 @@ button { touch-action: manipulation; }
 .group-button { width: 100%; min-height: 50px; display: flex; justify-content: space-between; align-items: center; background: var(--card2); border: 1px solid var(--line); color: var(--gold); border-radius: 16px; padding: 10px 14px; font-size: 21px; font-weight: 900; margin: 12px 0 8px; text-align: left; }
 .group-count { color: var(--muted); font-size: 14px; font-weight: 800; }
 .article-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 8px; }
-.article-tile { min-height: 86px; border: 1px solid var(--line); background: var(--card2); border-radius: 18px; color: var(--text); padding: 10px; text-align: center; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.article-tile { min-height: 86px; border: 1px solid var(--line); background: var(--card2); border-radius: 18px; color: var(--text); padding: 10px; text-align: center; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .article-tile .icon { font-size: 25px; line-height: 1; width: 100%; text-align: center; }
 .article-tile .name { width: 100%; font-weight: 900; font-size: 16px; margin-top: 5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .article-tile .price { width: 100%; color: var(--gold); font-weight: 900; margin-top: 2px; text-align: center; }

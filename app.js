@@ -10,7 +10,7 @@
   const num = (v) => Number(String(v ?? '').replace('€', '').replace(',', '.').trim()) || 0;
 
 
-  const APP_VERSION = '1.1.0';
+  const APP_VERSION = '1.1.1';
   const PREFS_KEY = 'deckelapp-prefs-v1';
   const PIN_ENABLED_KEY = 'deckelapp-admin-pin-enabled';
   const PIN_HASH_KEY = 'deckelapp-admin-pin-hash';
@@ -268,28 +268,74 @@
   }
 
   function articleTile(article) {
-    const qty = state.order.filter(x => !x.isDeposit && !x.isDepositReturn && x.articleName === article.name).reduce((s,x)=>s+x.quantity,0);
+    const qty = articleOrderQuantity(article.name);
     const b = document.createElement('button'); b.type = 'button'; b.className = 'article-tile';
-    b.innerHTML = `${qty ? `<div class="count">${qty}×</div>` : ''}<div class="icon">${escapeHtml(article.icon || '🥤')}</div><div class="name">${escapeHtml(article.name)}</div><div class="price">${fmt(article.price)}</div>`;
-    let timer = null, longPressed = false, startX = 0, startY = 0;
+    b.dataset.articleName = article.name;
+    b.innerHTML = `<div class="count${qty ? '' : ' hidden'}">${qty ? `${qty}×` : ''}</div><div class="icon">${escapeHtml(article.icon || '🥤')}</div><div class="name">${escapeHtml(article.name)}</div><div class="price">${fmt(article.price)}</div>`;
+
+    // Ein schnelles Tippen zählt immer +1. Entfernen erfordert bewusstes, langes Gedrückthalten.
+    let holdTimer = null;
+    let longPressTriggered = false;
+    let startX = 0;
+    let startY = 0;
+
+    const cancelHold = () => {
+      if (holdTimer) clearTimeout(holdTimer);
+      holdTimer = null;
+    };
+
     b.addEventListener('pointerdown', e => {
-      startX = e.clientX; startY = e.clientY; longPressed = false;
-      timer = setTimeout(() => {
-        longPressed = true;
+      if (e.isPrimary === false) return;
+      cancelHold();
+      startX = e.clientX;
+      startY = e.clientY;
+      longPressTriggered = false;
+      holdTimer = setTimeout(() => {
+        holdTimer = null;
+        longPressTriggered = true;
         flashTile(b, 'removed-feedback');
-        setTimeout(() => removeOneArticle(article.name), 120);
-      }, 550);
+        removeOneArticle(article.name);
+      }, 900);
     });
-    b.addEventListener('pointermove', e => { if (Math.abs(e.clientX-startX) > 12 || Math.abs(e.clientY-startY) > 12) { clearTimeout(timer); timer = null; } });
-    ['pointerup','pointercancel','pointerleave'].forEach(name => b.addEventListener(name, () => { clearTimeout(timer); timer = null; }));
+
+    b.addEventListener('pointermove', e => {
+      if (Math.abs(e.clientX - startX) > 14 || Math.abs(e.clientY - startY) > 14) cancelHold();
+    });
+
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(name => b.addEventListener(name, cancelHold));
+    b.addEventListener('contextmenu', e => e.preventDefault());
+
     b.addEventListener('click', e => {
-      if (longPressed) { longPressed = false; e.preventDefault(); return; }
+      if (longPressTriggered) {
+        longPressTriggered = false;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
       flashTile(b, 'added-feedback');
-      setTimeout(() => addArticle(article), 110);
+      addArticle(article);
     });
     return b;
   }
-  function flashTile(tile, cls) { tile.classList.add(cls); setTimeout(() => tile.classList.remove(cls), 260); }
+
+  function articleOrderQuantity(articleName) {
+    return state.order
+      .filter(x => !x.isDeposit && !x.isDepositReturn && x.articleName === articleName)
+      .reduce((sum, x) => sum + x.quantity, 0);
+  }
+
+  function refreshArticleTileQuantity(articleName) {
+    const qty = articleOrderQuantity(articleName);
+    $$('.article-tile').forEach(tile => {
+      if (tile.dataset.articleName !== articleName) return;
+      const badge = $('.count', tile);
+      if (!badge) return;
+      badge.textContent = qty ? `${qty}×` : '';
+      badge.classList.toggle('hidden', qty <= 0);
+    });
+  }
+
+  function flashTile(tile, cls) { tile.classList.add(cls); setTimeout(() => tile.classList.remove(cls), 220); }
   function removeOneArticle(articleName) {
     const line = state.order.find(x => !x.isDeposit && !x.isDepositReturn && x.articleName === articleName);
     if (!line) { toast('Artikel ist noch nicht auf der Bestellung'); return false; }
@@ -298,7 +344,9 @@
     if (dep) dep.quantity--;
     if (line.quantity <= 0) state.order = state.order.filter(x => !(x.articleName === articleName && (!x.isDepositReturn)));
     else if (dep && dep.quantity <= 0) state.order = state.order.filter(x => x !== dep);
-    changedOrder();
+    updateOrderButton();
+    refreshArticleTileQuantity(articleName);
+    if (el.sheet.classList.contains('open')) renderOrderSheet();
     return true;
   }
 
@@ -311,7 +359,9 @@
       line.quantity++;
       const dep = state.order.find(x => x.isDeposit && x.articleName === article.name); if (dep) dep.quantity++;
     }
-    updateOrderButton(); renderArticleGroups(); if (el.sheet.classList.contains('open')) renderOrderSheet();
+    updateOrderButton();
+    refreshArticleTileQuantity(article.name);
+    if (el.sheet.classList.contains('open')) renderOrderSheet();
   }
 
   function renderOrderSheet() {

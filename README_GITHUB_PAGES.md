@@ -106,3 +106,11 @@ Große Bedienungs- und Verwaltungsoptimierung:
 - Optionaler Wake-Lock hält den Bildschirm während des Verkaufs aktiv, sofern unterstützt.
 - Vollbild-Schaltfläche für Browserbetrieb, sofern unterstützt.
 - Optionaler lokaler Verwaltungs-PIN für Event, Artikelstamm und Einstellungen.
+
+
+## Version 1.1.1
+
+- Schnelles mehrfaches Tippen auf Artikelkacheln zaehlt jetzt unmittelbar und stabil nach oben.
+- Die Artikelansicht wird beim Hinzufuegen nicht mehr nach jedem Tap komplett neu aufgebaut; nur das Mengenbadge wird aktualisiert.
+- Langes Druecken zum Entfernen reagiert erst nach ca. 0,9 Sekunden und wird bei Fingerbewegung abgebrochen.
+- Browser-Kontextmenue/Touch-Callout auf Artikelkacheln unterdrueckt, damit langes Druecken nicht mit der Bedienung kollidiert.

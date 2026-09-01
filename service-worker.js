@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deckelapp-pwa-v1.1.0-full-optimierung';
+const CACHE_NAME = 'deckelapp-pwa-v1.1.1-tap-stabil';
 const ASSETS = [
   './',
   './index.html',
