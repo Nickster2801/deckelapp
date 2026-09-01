@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="de" data-preset="classic" data-mode="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07111F">
+  <title>DeckelApp Kundenanzeige</title>
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="customer-display.css">
+</head>
+<body>
+  <main class="terminal-shell">
+    <header class="terminal-header">
+      <div class="terminal-brand">
+        <img id="terminalLogo" src="icons/icon-192.png" alt="Logo" class="terminal-logo">
+        <div>
+          <div id="terminalTitle" class="terminal-title">Ihre Bestellung</div>
+          <div id="terminalEvent" class="terminal-event">Standard-Event</div>
+        </div>
+      </div>
+      <div id="terminalCount" class="terminal-count">0 Artikel</div>
+    </header>
+
+    <section class="terminal-content">
+      <div id="terminalEmpty" class="terminal-empty">
+        <div class="terminal-empty-icon">🧾</div>
+        <div>Bereit für die nächste Bestellung</div>
+        <span>Ihre Artikel erscheinen hier automatisch.</span>
+      </div>
+      <div id="terminalChange" class="terminal-change hidden"></div>
+      <div id="terminalLines" class="terminal-lines"></div>
+    </section>
+
+    <footer class="terminal-footer">
+      <span>Zu bezahlen</span>
+      <strong id="terminalTotal">0,00 €</strong>
+    </footer>
+  </main>
+  <script src="customer-display.js"></script>
+</body>
+</html>

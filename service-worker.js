@@ -1,9 +1,12 @@
-const CACHE_NAME = 'deckelapp-pwa-v1.1.2-events';
+const CACHE_NAME = 'deckelapp-pwa-v1.1.4-customer-live-theme';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
+  './customer-display.html',
+  './customer-display.css',
+  './customer-display.js',
   './manifest.webmanifest',
   './icons/icon-72.png',
   './icons/icon-96.png',

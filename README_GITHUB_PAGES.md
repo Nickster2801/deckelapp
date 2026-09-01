@@ -121,3 +121,21 @@ Große Bedienungs- und Verwaltungsoptimierung:
 - Events können zurückgesetzt werden. Dabei werden Bestellhistorie und Statistik dieses Events geleert, Artikel/Gruppen bleiben erhalten.
 - Events können vollständig gelöscht werden. Die zugehörige Bestellhistorie wird nach Sicherheitsabfrage mit gelöscht.
 - Wird das aktive Event gelöscht, aktiviert die App automatisch ein anderes Event; falls kein weiteres vorhanden ist, wird ein neues Standard-Event angelegt.
+
+
+## Version 1.1.4 – Kundenanzeige / Verkaufsterminal
+
+- Schieberegler bleiben auch auf kleinen Displays in voller Größe sichtbar.
+- Unter Einstellungen gibt es eine Kundenanzeige. Der Schalter öffnet ein zweites Browserfenster.
+- Die Kundenanzeige synchronisiert die aktuelle Bestellung, Mengen, Pfandpositionen und den Gesamtbetrag live.
+- Gestaltung der Kundenanzeige: Klassik, Orange, Burgunder/Dunkelrot oder Dunkelgrün – jeweils hell oder dunkel.
+- Optional kann eine eigene Hintergrundfarbe verwendet werden.
+- Für die Kundenanzeige kann ein eigenes Logo hochgeladen oder das DeckelApp-Logo verwendet werden.
+- Die Kundenanzeige ist Bestandteil des Offline-Caches. Nach einem vollständigen Online-Laden kann auch diese Seite offline geöffnet werden.
+
+Hinweis: Auf Smartphones kann der Browser das zweite Fenster als neuen Tab öffnen. Auf Geräten mit zweitem Monitor kann das Fenster auf den Kundenbildschirm verschoben werden. Pop-ups müssen für die GitHub-Pages-Seite erlaubt sein.
+
+
+## Version 1.1.4
+- Kundenanzeige: Farbstile gestalten jetzt auch den kompletten Hintergrund (Klassik/Violett, Orange, Burgunder, Dunkelgruen; jeweils Hell/Dunkel).
+- Live-Synchronisation verstaerkt: direkte Fensterkommunikation, BroadcastChannel und lokaler Fallback. Jede Mengen-, Loesch-, Pfand-, Leer- und Abschlussaenderung wird sofort an die Kundenanzeige uebertragen.

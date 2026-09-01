@@ -10,16 +10,26 @@
   const num = (v) => Number(String(v ?? '').replace('€', '').replace(',', '.').trim()) || 0;
 
 
-  const APP_VERSION = '1.1.2';
+  const APP_VERSION = '1.1.4';
   const PREFS_KEY = 'deckelapp-prefs-v1';
   const PIN_ENABLED_KEY = 'deckelapp-admin-pin-enabled';
   const PIN_HASH_KEY = 'deckelapp-admin-pin-hash';
   const ADMIN_PAGES = new Set(['events', 'articles', 'settings']);
 
   function loadPrefs() {
+    const defaults = {
+      wakeLockEnabled: false,
+      lastBackupAt: '',
+      customerDisplayTheme: 'classic',
+      customerDisplayMode: 'dark',
+      customerDisplayUseCustomBg: false,
+      customerDisplayBg: '#07111F',
+      customerDisplayLogo: '',
+      customerDisplayTitle: 'Ihre Bestellung'
+    };
     try {
-      return { wakeLockEnabled: false, lastBackupAt: '', ...JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') };
-    } catch { return { wakeLockEnabled: false, lastBackupAt: '' }; }
+      return { ...defaults, ...JSON.parse(localStorage.getItem(PREFS_KEY) || '{}') };
+    } catch { return defaults; }
   }
   const prefs = loadPrefs();
   function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch {} }
@@ -118,7 +128,12 @@
     installPrompt: null,
     adminUnlocked: false,
     wakeLock: null,
-    swRegistration: null
+    swRegistration: null,
+    customerWindow: null,
+    customerDisplayActive: false,
+    customerLastChange: null,
+    customerChangeSeq: 0,
+    customerStorageTimer: null
   };
 
   const el = {
@@ -128,6 +143,121 @@
     toast: $('#toast'), installButton: $('#installButton'), appVersion: $('#appVersion'),
     updateBanner: $('#updateBanner'), updateButton: $('#updateButton'), updateLaterButton: $('#updateLaterButton')
   };
+
+
+  const CUSTOMER_CHANNEL_NAME = 'deckelapp-customer-display-v1';
+  const CUSTOMER_STATE_KEY = 'deckelapp-customer-display-state';
+  const customerChannel = 'BroadcastChannel' in window ? new BroadcastChannel(CUSTOMER_CHANNEL_NAME) : null;
+
+  customerChannel?.addEventListener('message', event => {
+    const msg = event.data || {};
+    if (msg.type === 'customer-ready' || msg.type === 'customer-heartbeat') {
+      const wasActive = state.customerDisplayActive;
+      state.customerDisplayActive = true;
+      broadcastCustomerDisplay();
+      if (!wasActive && state.page === 'settings') renderSettingsPage();
+    } else if (msg.type === 'customer-closed') {
+      state.customerDisplayActive = false;
+      state.customerWindow = null;
+      if (state.page === 'settings') renderSettingsPage();
+    }
+  });
+
+  function markCustomerChange(name, delta = 0) {
+    state.customerChangeSeq += 1;
+    state.customerLastChange = { name, delta, seq: state.customerChangeSeq, at: nowIso() };
+  }
+
+  function customerDisplaySnapshot() {
+    return {
+      type: 'order-state',
+      appVersion: APP_VERSION,
+      eventName: state.data.currentEvent,
+      count: orderCount(),
+      total: orderTotal(),
+      order: state.order.map(line => ({
+        name: line.name,
+        articleName: line.articleName,
+        quantity: Number(line.quantity || 0),
+        unitPrice: Number(line.unitPrice || 0),
+        isDeposit: !!line.isDeposit,
+        isDepositReturn: !!line.isDepositReturn
+      })),
+      lastChange: state.customerLastChange,
+      changeSeq: state.customerChangeSeq,
+      appearance: {
+        theme: prefs.customerDisplayTheme || 'classic',
+        mode: prefs.customerDisplayMode === 'light' ? 'light' : 'dark',
+        useCustomBg: !!prefs.customerDisplayUseCustomBg,
+        background: prefs.customerDisplayBg || '#07111F',
+        logo: prefs.customerDisplayLogo || '',
+        title: prefs.customerDisplayTitle || 'Ihre Bestellung'
+      },
+      updatedAt: nowIso()
+    };
+  }
+
+  function broadcastCustomerDisplay(forceStorage = false) {
+    const snapshot = customerDisplaySnapshot();
+
+    // 1) Direkte Verbindung zum geoeffneten Kundenfenster.
+    // Das reagiert auch bei sehr schnellen Aenderungen sofort.
+    try {
+      if (state.customerWindow && !state.customerWindow.closed) {
+        state.customerWindow.postMessage(snapshot, location.origin);
+      }
+    } catch {}
+
+    // 2) BroadcastChannel fuer weitere Fenster/Tabs derselben App.
+    try { customerChannel?.postMessage(snapshot); } catch {}
+
+    // 3) localStorage als robuste Rueckfalle und fuer spaeter geoeffnete Anzeigen.
+    const storeSnapshot = () => {
+      state.customerStorageTimer = null;
+      try { localStorage.setItem(CUSTOMER_STATE_KEY, JSON.stringify(snapshot)); } catch {}
+    };
+    if (forceStorage) {
+      if (state.customerStorageTimer) clearTimeout(state.customerStorageTimer);
+      storeSnapshot();
+    } else {
+      if (state.customerStorageTimer) clearTimeout(state.customerStorageTimer);
+      state.customerStorageTimer = setTimeout(storeSnapshot, 40);
+    }
+  }
+
+  function openCustomerDisplay(toggle = null) {
+    const url = new URL('customer-display.html', location.href).href;
+    let popup = null;
+    try { popup = window.open(url, 'deckelappCustomerDisplay', 'popup=yes,width=980,height=720,resizable=yes,scrollbars=yes'); } catch {}
+    if (!popup) {
+      if (toggle) toggle.checked = false;
+      state.customerDisplayActive = false;
+      toast('Kundenanzeige wurde vom Browser blockiert');
+      return false;
+    }
+    state.customerWindow = popup;
+    state.customerDisplayActive = true;
+    broadcastCustomerDisplay(true);
+    try { popup.focus(); } catch {}
+    return true;
+  }
+
+  function closeCustomerDisplay() {
+    try { customerChannel?.postMessage({ type: 'close-display' }); } catch {}
+    try { state.customerWindow?.close(); } catch {}
+    state.customerWindow = null;
+    state.customerDisplayActive = false;
+  }
+
+  setInterval(() => {
+    if (state.customerWindow && state.customerWindow.closed) {
+      state.customerWindow = null;
+      if (state.customerDisplayActive) {
+        state.customerDisplayActive = false;
+        if (state.page === 'settings') renderSettingsPage();
+      }
+    }
+  }, 1200);
 
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault(); state.installPrompt = e; el.installButton.classList.remove('hidden');
@@ -214,6 +344,7 @@
     const count = orderCount();
     el.orderButton.textContent = `📝 Bestellung anzeigen   ${count} Artikel | ${fmt(orderTotal())}`;
     el.orderButton.classList.toggle('has-items', count > 0 || Math.abs(orderTotal()) > 0.0001);
+    broadcastCustomerDisplay();
   }
 
   async function showPage(page, skipGuard = false) {
@@ -344,6 +475,7 @@
     if (dep) dep.quantity--;
     if (line.quantity <= 0) state.order = state.order.filter(x => !(x.articleName === articleName && (!x.isDepositReturn)));
     else if (dep && dep.quantity <= 0) state.order = state.order.filter(x => x !== dep);
+    markCustomerChange(articleName, -1);
     updateOrderButton();
     refreshArticleTileQuantity(articleName);
     if (el.sheet.classList.contains('open')) renderOrderSheet();
@@ -359,6 +491,7 @@
       line.quantity++;
       const dep = state.order.find(x => x.isDeposit && x.articleName === article.name); if (dep) dep.quantity++;
     }
+    markCustomerChange(article.name, 1);
     updateOrderButton();
     refreshArticleTileQuantity(article.name);
     if (el.sheet.classList.contains('open')) renderOrderSheet();
@@ -382,7 +515,7 @@
     $$('[data-plus]', el.orderLines).forEach(b => b.onclick = () => changeQty(Number(b.dataset.plus), 1));
     $$('[data-del]', el.orderLines).forEach(b => b.onclick = () => removeOrderLine(Number(b.dataset.del)));
     $('#orderNote').addEventListener('input', e => state.note = e.target.value || '');
-    $('#clearOrder').onclick = () => { state.order = []; state.note = ''; changedOrder(); };
+    $('#clearOrder').onclick = () => { state.order = []; state.note = ''; markCustomerChange('Bestellung geleert', 0); changedOrder(); };
     $('#depositBack').onclick = () => addDepositReturn();
     $('#saveOrder').onclick = () => saveOrder();
   }
@@ -395,6 +528,7 @@
     } else {
       state.order.splice(index, 1);
     }
+    markCustomerChange(line.articleName || line.name, -Number(line.quantity || 1));
     changedOrder();
   }
   function changeQty(index, by) {
@@ -414,6 +548,7 @@
       line.quantity += by;
       if (line.quantity <= 0) state.order.splice(index, 1);
     }
+    markCustomerChange(line.articleName || line.name, by);
     changedOrder();
   }
   function changedOrder() { updateOrderButton(); renderOrderSheet(); if (state.page === 'orders') renderArticleGroups(); }
@@ -425,6 +560,7 @@
       if (price <= 0) { toast('Bitte gültigen Pfandpreis eingeben'); return; }
       if (q <= 0) { toast('Bitte gültige Anzahl eingeben'); return; }
       state.order.push({ name:'Pfand zurück', articleName:'Pfand zurück', quantity:q, unitPrice:-price, isDeposit:false, isDepositReturn:true });
+      markCustomerChange('Pfand zurück', q);
       closeModal();
       changedOrder();
     };
@@ -438,7 +574,7 @@
       const previousNote = state.note;
       const savedOrder = { id:id(), date: nowIso(), eventName: state.data.currentEvent, note: previousNote, received, lines: previousOrder.map(x => ({...x})) };
       state.data.orders.push(savedOrder);
-      state.order = []; state.note = ''; save(); closeModal(); closeSheet(); renderArticleGroups();
+      state.order = []; state.note = ''; markCustomerChange('Bestellung abgeschlossen', 0); save(); closeModal(); closeSheet(); renderArticleGroups();
       toast('✓ Bestellung gespeichert', 'Rückgängig', () => undoCompletedOrder(savedOrder, previousOrder, previousNote), 5600);
     };
 
@@ -547,6 +683,7 @@
     state.data.orders.splice(idx, 1);
     state.order = previousOrder.map(x => ({...x}));
     state.note = previousNote;
+    markCustomerChange('Bestellung wiederhergestellt', 0);
     save();
     if (state.page === 'orders') renderArticleGroups();
     toast('Bestellung wiederhergestellt');
@@ -877,7 +1014,16 @@
         <div class="settings-section-title">Bestellung</div>
         <div class="card settings-card">
           <div class="switch-row"><div><div>Bildschirm eingeschaltet lassen</div><div class="small-muted">Praktisch während des Verkaufs. ${wakeSupported?'':'Von diesem Browser nicht unterstützt.'}</div></div><label class="switch"><input id="wakeLockToggle" type="checkbox" ${prefs.wakeLockEnabled?'checked':''} ${wakeSupported?'':'disabled'}><span class="slider"></span></label></div>
-          <div class="small-muted">Tipp: Artikel kurz antippen = hinzufügen · Artikel etwa 0,5 s gedrückt halten = ein Stück entfernen.</div>
+          <div class="small-muted">Tipp: Artikel kurz antippen = hinzufügen · Artikel etwa 0,9 s gedrückt halten = ein Stück entfernen.</div>
+        </div>
+      </section>
+      <section class="settings-section">
+        <div class="settings-section-title">Kundenanzeige / Verkaufsterminal</div>
+        <div class="card settings-card">
+          <div class="switch-row"><div><div>Kundenanzeige öffnen</div><div class="small-muted">Öffnet ein zweites Fenster mit der aktuellen Bestellung und dem Gesamtbetrag.</div></div><label class="switch"><input id="customerDisplayToggle" type="checkbox" ${state.customerDisplayActive?'checked':''}><span class="slider"></span></label></div>
+          <div class="settings-status"><div><div>Status</div><div class="small-muted">Für einen zweiten Bildschirm das Fenster anschließend auf den Kundenmonitor verschieben.</div></div><span class="status-pill ${state.customerDisplayActive?'ok':''}">${state.customerDisplayActive?'Aktiv':'Geschlossen'}</span></div>
+          <button id="customerDisplayDesign" class="secondary-button">Kundenanzeige gestalten</button>
+          ${state.customerDisplayActive ? `<button id="customerDisplayRefresh" class="secondary-button">Anzeige aktualisieren / fokussieren</button>` : ''}
         </div>
       </section>
       <section class="settings-section">
@@ -911,6 +1057,21 @@
 
     $('#lightModeToggle').onchange = e => { setTheme(e.target.checked ? 'light' : 'dark'); toast(e.target.checked ? 'Heller Modus aktiviert' : 'Darkmode aktiviert'); };
     $('#wakeLockToggle').onchange = async e => { prefs.wakeLockEnabled = e.target.checked; savePrefs(); await syncWakeLock(true); };
+    $('#customerDisplayToggle').onchange = e => {
+      if (e.target.checked) {
+        if (openCustomerDisplay(e.target)) { toast('Kundenanzeige geöffnet'); setTimeout(() => { if (state.page === 'settings') renderSettingsPage(); }, 120); }
+      } else {
+        closeCustomerDisplay();
+        toast('Kundenanzeige geschlossen');
+        renderSettingsPage();
+      }
+    };
+    $('#customerDisplayDesign').onclick = openCustomerDisplayDesigner;
+    $('#customerDisplayRefresh')?.addEventListener('click', () => {
+      if (!state.customerWindow || state.customerWindow.closed) openCustomerDisplay();
+      broadcastCustomerDisplay(true);
+      try { state.customerWindow?.focus(); } catch {}
+    });
     $('#exportData').onclick = createBackup;
     $('#importData').onclick = () => $('#importFile').click();
     $('#importFile').onchange = restoreBackup;
@@ -919,6 +1080,82 @@
     $('#lockAdminNow')?.addEventListener('click', () => { state.adminUnlocked=false; showPage('orders', true); toast('Verwaltung gesperrt'); });
     $('#checkUpdate').onclick = () => checkForUpdate(true);
     $('#fullscreenButton')?.addEventListener('click', async () => { try { await document.documentElement.requestFullscreen(); } catch { toast('Vollbild konnte nicht geöffnet werden'); } });
+  }
+
+  function openCustomerDisplayDesigner() {
+    const theme = prefs.customerDisplayTheme || 'classic';
+    const mode = prefs.customerDisplayMode === 'light' ? 'light' : 'dark';
+    const logoSrc = prefs.customerDisplayLogo || 'icons/icon-192.png';
+    modal(`<h2>Kundenanzeige gestalten</h2>
+      <div class="form-grid">
+        <div class="terminal-designer-preview">
+          <img id="terminalLogoPreview" src="${escapeAttr(logoSrc)}" alt="Logo-Vorschau">
+          <div><div class="line-title">${escapeHtml(prefs.customerDisplayTitle || 'Ihre Bestellung')}</div><div class="small-muted">Vorschau des Logos</div></div>
+        </div>
+        <div class="field"><label>Überschrift</label><input id="terminalTitle" value="${escapeAttr(prefs.customerDisplayTitle || 'Ihre Bestellung')}" maxlength="40"></div>
+        <div class="field"><label>Farbstil</label><select id="terminalTheme">
+          <option value="classic" ${theme==='classic'?'selected':''}>Klassik · Violett</option>
+          <option value="orange" ${theme==='orange'?'selected':''}>Orange</option>
+          <option value="burgundy" ${theme==='burgundy'?'selected':''}>Burgunder / Dunkelrot</option>
+          <option value="forest" ${theme==='forest'?'selected':''}>Dunkelgrün</option>
+        </select></div>
+        <div class="switch-row"><div><div>Heller Modus</div><div class="small-muted">Aus = dunkle Kundenanzeige · Ein = helle Kundenanzeige</div></div><label class="switch"><input id="terminalLightMode" type="checkbox" ${mode==='light'?'checked':''}><span class="slider"></span></label></div>
+        <div class="switch-row"><div><div>Eigene Hintergrundfarbe</div><div class="small-muted">Überschreibt nur die Hintergrundfarbe des gewählten Designs.</div></div><label class="switch"><input id="terminalCustomBgToggle" type="checkbox" ${prefs.customerDisplayUseCustomBg?'checked':''}><span class="slider"></span></label></div>
+        <div id="terminalBgRow" class="field ${prefs.customerDisplayUseCustomBg?'':'hidden'}"><label>Hintergrundfarbe</label><div class="color-input-row"><input id="terminalBgColor" type="color" value="${escapeAttr(prefs.customerDisplayBg || '#07111F')}"><span id="terminalBgValue">${escapeHtml(prefs.customerDisplayBg || '#07111F')}</span></div></div>
+        <div class="field"><label>Logo</label><div class="row fill"><button id="chooseTerminalLogo" class="secondary-button" type="button">Eigenes Logo wählen</button><button id="resetTerminalLogo" class="secondary-button" type="button">App-Logo verwenden</button></div><input id="terminalLogoFile" type="file" accept="image/*" class="hidden"></div>
+        <div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="saveTerminalDesign" class="action-button">Design speichern</button></div>
+      </div>`);
+
+    let logoData = prefs.customerDisplayLogo || '';
+    const customToggle = $('#terminalCustomBgToggle');
+    const bgRow = $('#terminalBgRow');
+    customToggle.onchange = () => bgRow.classList.toggle('hidden', !customToggle.checked);
+    $('#terminalBgColor').oninput = e => $('#terminalBgValue').textContent = e.target.value.toUpperCase();
+    $('#chooseTerminalLogo').onclick = () => $('#terminalLogoFile').click();
+    $('#terminalLogoFile').onchange = async e => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        logoData = await imageFileToCompactDataUrl(file, 512);
+        $('#terminalLogoPreview').src = logoData;
+      } catch { toast('Logo konnte nicht geladen werden'); }
+    };
+    $('#resetTerminalLogo').onclick = () => { logoData = ''; $('#terminalLogoPreview').src = 'icons/icon-192.png'; };
+    $('#saveTerminalDesign').onclick = () => {
+      prefs.customerDisplayTitle = norm($('#terminalTitle').value) || 'Ihre Bestellung';
+      prefs.customerDisplayTheme = $('#terminalTheme').value || 'classic';
+      prefs.customerDisplayMode = $('#terminalLightMode').checked ? 'light' : 'dark';
+      prefs.customerDisplayUseCustomBg = $('#terminalCustomBgToggle').checked;
+      prefs.customerDisplayBg = $('#terminalBgColor').value || '#07111F';
+      prefs.customerDisplayLogo = logoData;
+      savePrefs();
+      broadcastCustomerDisplay(true);
+      closeModal();
+      toast('Kundenanzeige gespeichert');
+    };
+  }
+
+  function imageFileToCompactDataUrl(file, maxSize = 512) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = () => {
+        const image = new Image();
+        image.onerror = reject;
+        image.onload = () => {
+          const scale = Math.min(1, maxSize / Math.max(image.naturalWidth || 1, image.naturalHeight || 1));
+          const width = Math.max(1, Math.round(image.naturalWidth * scale));
+          const height = Math.max(1, Math.round(image.naturalHeight * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(image, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/webp', 0.86));
+        };
+        image.src = String(reader.result || '');
+      };
+      reader.readAsDataURL(file);
+    });
   }
 
   function createBackup() {
