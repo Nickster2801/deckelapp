@@ -139,3 +139,12 @@ Hinweis: Auf Smartphones kann der Browser das zweite Fenster als neuen Tab öffn
 ## Version 1.1.4
 - Kundenanzeige: Farbstile gestalten jetzt auch den kompletten Hintergrund (Klassik/Violett, Orange, Burgunder, Dunkelgruen; jeweils Hell/Dunkel).
 - Live-Synchronisation verstaerkt: direkte Fensterkommunikation, BroadcastChannel und lokaler Fallback. Jede Mengen-, Loesch-, Pfand-, Leer- und Abschlussaenderung wird sofort an die Kundenanzeige uebertragen.
+
+
+## Version 1.1.5 – Kundenanzeige kompakt
+- Anzeige „Zuletzt geändert“ vollständig entfernt.
+- Pfand wird in der Kundenanzeige direkt dem zugehörigen Artikel zugeordnet statt als eigene Position dargestellt.
+- Produkt-Gesamtsumme in der Kundenanzeige enthält den zugehörigen Pfandbetrag.
+- Kundenanzeige nutzt die verfügbare Bildschirmfläche automatisch und ohne vertikales Scrollen.
+- Je nach Anzahl der Positionen werden Spaltenzahl und Darstellungsdichte automatisch angepasst.
+- Kopf- und Fußbereich wurden kompakter gestaltet, damit mehr Platz für die Bestellung bleibt.

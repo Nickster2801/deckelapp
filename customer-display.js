@@ -6,11 +6,10 @@
   const fmt = n => Number(n || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
   const channel = 'BroadcastChannel' in window ? new BroadcastChannel(CHANNEL) : null;
   let lastSnapshot = null;
-  let lastHighlighted = '';
 
   const el = {
     logo: $('#terminalLogo'), title: $('#terminalTitle'), event: $('#terminalEvent'), count: $('#terminalCount'),
-    empty: $('#terminalEmpty'), change: $('#terminalChange'), lines: $('#terminalLines'), total: $('#terminalTotal')
+    empty: $('#terminalEmpty'), lines: $('#terminalLines'), total: $('#terminalTotal')
   };
 
   function escapeHtml(value) {
@@ -41,47 +40,145 @@
     el.title.textContent = appearance.title || 'Ihre Bestellung';
   }
 
+  function combineOrderLines(order) {
+    const deposits = new Map();
+    const usedDeposits = new Set();
+
+    order.forEach((line, index) => {
+      if (!line.isDeposit || line.isDepositReturn) return;
+      const key = String(line.articleName || '').trim();
+      if (!key) return;
+      if (!deposits.has(key)) deposits.set(key, []);
+      deposits.get(key).push({ line, index });
+    });
+
+    const result = [];
+    order.forEach((line, index) => {
+      if (line.isDeposit && !line.isDepositReturn) return;
+
+      if (line.isDepositReturn) {
+        result.push({
+          kind: 'return',
+          name: line.name || 'Pfand zurück',
+          quantity: Number(line.quantity || 0),
+          unitPrice: Number(line.unitPrice || 0),
+          total: Number(line.quantity || 0) * Number(line.unitPrice || 0)
+        });
+        return;
+      }
+
+      const key = String(line.articleName || line.name || '').trim();
+      const linked = deposits.get(key) || [];
+      let depositQty = 0;
+      let depositTotal = 0;
+      let depositPrice = 0;
+      linked.forEach(entry => {
+        usedDeposits.add(entry.index);
+        const qty = Number(entry.line.quantity || 0);
+        const price = Number(entry.line.unitPrice || 0);
+        depositQty += qty;
+        depositTotal += qty * price;
+        if (!depositPrice && price) depositPrice = price;
+      });
+
+      const productQty = Number(line.quantity || 0);
+      const productPrice = Number(line.unitPrice || 0);
+      result.push({
+        kind: 'product',
+        name: line.name || key,
+        quantity: productQty,
+        unitPrice: productPrice,
+        depositQty,
+        depositPrice,
+        depositTotal,
+        total: productQty * productPrice + depositTotal
+      });
+    });
+
+    order.forEach((line, index) => {
+      if (!line.isDeposit || line.isDepositReturn || usedDeposits.has(index)) return;
+      result.push({
+        kind: 'deposit',
+        name: line.articleName ? `Pfand · ${line.articleName}` : 'Pfand',
+        quantity: Number(line.quantity || 0),
+        unitPrice: Number(line.unitPrice || 0),
+        total: Number(line.quantity || 0) * Number(line.unitPrice || 0)
+      });
+    });
+
+    return result.filter(line => line.quantity > 0);
+  }
+
+  function fitLayout(count) {
+    if (!count) {
+      document.documentElement.dataset.density = 'normal';
+      document.documentElement.style.setProperty('--terminal-cols', 1);
+      document.documentElement.style.setProperty('--terminal-rows', 1);
+      return;
+    }
+
+    const width = Math.max(window.innerWidth || 0, 320);
+    const height = Math.max(window.innerHeight || 0, 320);
+    const estimatedChrome = width <= 600 ? 132 : 170;
+    const usableHeight = Math.max(150, height - estimatedChrome);
+    const targetRowHeight = width <= 600 ? 70 : 92;
+    const maxRows = Math.max(2, Math.floor(usableHeight / targetRowHeight));
+    let cols = Math.max(1, Math.ceil(count / maxRows));
+    const maxCols = width < 700 ? 2 : width < 1200 ? 3 : 4;
+    cols = Math.min(cols, maxCols);
+    let rows = Math.ceil(count / cols);
+
+    while (rows > maxRows && cols < maxCols) {
+      cols += 1;
+      rows = Math.ceil(count / cols);
+    }
+
+    const rowHeight = usableHeight / Math.max(rows, 1);
+    const density = rowHeight < 52 ? 'dense' : rowHeight < 75 ? 'compact' : 'normal';
+    document.documentElement.dataset.density = density;
+    document.documentElement.style.setProperty('--terminal-cols', cols);
+    document.documentElement.style.setProperty('--terminal-rows', rows);
+  }
+
   function render(snapshot) {
     if (!snapshot || snapshot.type !== 'order-state') return;
     lastSnapshot = snapshot;
     applyAppearance(snapshot.appearance);
     el.event.textContent = snapshot.eventName || 'Event';
     const itemCount = Number(snapshot.count || 0);
-    el.count.textContent = `${itemCount} ${itemCount === 1 ? 'Artikel' : 'Artikel'}`;
+    el.count.textContent = `${itemCount} Artikel`;
     el.total.textContent = fmt(snapshot.total);
 
-    const order = Array.isArray(snapshot.order) ? snapshot.order.filter(line => Number(line.quantity || 0) > 0) : [];
+    const rawOrder = Array.isArray(snapshot.order) ? snapshot.order.filter(line => Number(line.quantity || 0) > 0) : [];
+    const order = combineOrderLines(rawOrder);
     el.empty.classList.toggle('hidden', order.length > 0);
     el.lines.classList.toggle('hidden', order.length === 0);
+    fitLayout(order.length);
 
-    const change = snapshot.lastChange;
-    if (change?.name && change.name !== 'Bestellung abgeschlossen' && change.name !== 'Bestellung geleert') {
-      const sign = Number(change.delta) > 0 ? '+' : Number(change.delta) < 0 ? '−' : '';
-      el.change.textContent = sign ? `Zuletzt geändert: ${sign}${Math.abs(Number(change.delta))} ${change.name}` : `Zuletzt: ${change.name}`;
-      el.change.classList.remove('hidden');
-    } else {
-      el.change.classList.add('hidden');
-    }
-
-    const changeKey = String(change?.seq ?? change?.at ?? snapshot.changeSeq ?? '');
-    const latestName = changeKey !== lastHighlighted ? change?.name : '';
     el.lines.innerHTML = order.map(line => {
-      const label = line.isDeposit && line.articleName && line.articleName !== 'Pfand'
-        ? `Pfand · ${line.articleName}`
-        : line.name;
-      const cls = line.isDepositReturn ? 'return' : line.isDeposit ? 'deposit' : '';
-      const latest = latestName && !line.isDeposit && (line.articleName === latestName || line.name === latestName) ? ' latest' : '';
-      return `<article class="terminal-line ${cls}${latest}">
+      if (line.kind === 'product') {
+        const depositText = line.depositQty > 0
+          ? `<span class="terminal-line-deposit"> · Pfand ${fmt(line.depositPrice)}${line.depositQty !== line.quantity ? ` × ${line.depositQty}` : ''}</span>`
+          : '';
+        return `<article class="terminal-line">
+          <div class="terminal-line-main">
+            <div class="terminal-line-name">${escapeHtml(line.name)}</div>
+            <div class="terminal-line-meta">${line.quantity} × ${fmt(line.unitPrice)}${depositText}</div>
+          </div>
+          <div class="terminal-line-total">${fmt(line.total)}</div>
+        </article>`;
+      }
+
+      const cls = line.kind === 'return' ? 'return' : 'deposit';
+      return `<article class="terminal-line ${cls}">
         <div class="terminal-line-main">
-          <div class="terminal-line-name">${escapeHtml(label)}</div>
-          <div class="terminal-line-meta">${Number(line.quantity)} × ${fmt(line.unitPrice)}</div>
+          <div class="terminal-line-name">${escapeHtml(line.name)}</div>
+          <div class="terminal-line-meta">${line.quantity} × ${fmt(line.unitPrice)}</div>
         </div>
-        <div class="terminal-line-total">${fmt(Number(line.quantity) * Number(line.unitPrice))}</div>
+        <div class="terminal-line-total">${fmt(line.total)}</div>
       </article>`;
     }).join('');
-    lastHighlighted = changeKey;
   }
-
 
   window.addEventListener('message', event => {
     if (event.origin !== location.origin) return;
@@ -101,6 +198,10 @@
     try { render(JSON.parse(event.newValue)); } catch {}
   });
 
+  window.addEventListener('resize', () => {
+    if (lastSnapshot) render(lastSnapshot);
+  });
+
   try {
     const cached = JSON.parse(localStorage.getItem(STATE_KEY) || 'null');
     if (cached) render(cached);
@@ -117,7 +218,7 @@
         render(cached);
       }
     } catch {}
-  }, 350);
+  }, 250);
 
   try { channel?.postMessage({ type: 'customer-ready' }); } catch {}
   setInterval(() => { try { channel?.postMessage({ type: 'customer-heartbeat' }); } catch {} }, 2500);
