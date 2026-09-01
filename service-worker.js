@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deckelapp-pwa-v1.1.1-tap-stabil';
+const CACHE_NAME = 'deckelapp-pwa-v1.1.2-events';
 const ASSETS = [
   './',
   './index.html',

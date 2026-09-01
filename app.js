@@ -10,7 +10,7 @@
   const num = (v) => Number(String(v ?? '').replace('€', '').replace(',', '.').trim()) || 0;
 
 
-  const APP_VERSION = '1.1.1';
+  const APP_VERSION = '1.1.2';
   const PREFS_KEY = 'deckelapp-prefs-v1';
   const PIN_ENABLED_KEY = 'deckelapp-admin-pin-enabled';
   const PIN_HASH_KEY = 'deckelapp-admin-pin-hash';
@@ -700,19 +700,97 @@
   function switchRow(label, idName, checked) { return `<div class="switch-row"><span>${label}</span><label class="switch"><input id="${idName}" type="checkbox" ${checked?'checked':''}><span class="slider"></span></label></div>`; }
 
   function renderEventsPage() {
-    el.content.innerHTML = pageTitle('Eventverwaltung') + `<div class="card"><div class="small-muted">Aktiv</div><div class="stat-value">${escapeHtml(state.data.currentEvent)}</div></div><button id="addEvent" class="action-button" style="width:100%">+ Neues Event</button><div id="events"></div>`;
+    el.content.innerHTML = pageTitle('Eventverwaltung') + `<div class="card"><div class="small-muted">Aktives Event</div><div class="stat-value">${escapeHtml(state.data.currentEvent)}</div></div><button id="addEvent" class="action-button" style="width:100%">+ Neues Event</button><div id="events" class="event-list"></div>`;
     $('#addEvent').onclick = () => {
-      modal(`<h2>Neues Event</h2><div class="form-grid"><div class="field"><label>Name</label><input id="eventName"></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="saveEvent" class="action-button">Speichern</button></div></div>`);
+      modal(`<h2>Neues Event</h2><div class="form-grid"><div class="field"><label>Name</label><input id="eventName" placeholder="Eventname eingeben"></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="saveEvent" class="action-button">Speichern</button></div></div>`);
       $('#saveEvent').onclick = () => {
-        const name = norm($('#eventName').value); if (!name) return;
+        const name = norm($('#eventName').value);
+        if (!name) return toast('Bitte einen Eventnamen eingeben');
+        const existing = state.data.events.find(e => e.name.toLocaleLowerCase('de-DE') === name.toLocaleLowerCase('de-DE'));
+        if (existing) { closeModal(); return requestEventSwitch(existing.name, () => renderEventsPage()); }
         closeModal(); requestEventSwitch(name, () => renderEventsPage());
       };
     };
+
     const box = $('#events');
     state.data.events.slice().sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).forEach(e => {
-      const b = document.createElement('button'); b.type='button'; b.className=e.name===state.data.currentEvent?'action-button':'secondary-button'; b.style.cssText='width:100%;margin-top:10px;text-align:left'; b.textContent=(e.name===state.data.currentEvent?'✓ ':'')+e.name;
-      b.onclick=()=>requestEventSwitch(e.name, () => renderEventsPage()); box.appendChild(b);
+      const active = e.name === state.data.currentEvent;
+      const count = eventOrders(e.name).length;
+      const card = document.createElement('div');
+      card.className = 'card event-card';
+      card.innerHTML = `
+        <div class="event-card-head">
+          <div>
+            <div class="line-title">${active ? '✓ ' : ''}${escapeHtml(e.name)}</div>
+            <div class="line-meta">${active ? 'Aktiv · ' : ''}${count} ${count === 1 ? 'Bestellung' : 'Bestellungen'}</div>
+          </div>
+          ${active ? '<span class="status-pill ok">Aktiv</span>' : `<button type="button" class="action-button event-use-button" data-event-use="${escapeAttr(e.name)}">Verwenden</button>`}
+        </div>
+        <div class="event-card-actions">
+          <button type="button" class="secondary-button" data-event-edit="${escapeAttr(e.name)}">Bearbeiten</button>
+          <button type="button" class="secondary-button" data-event-reset="${escapeAttr(e.name)}">Zurücksetzen</button>
+          <button type="button" class="danger-button" data-event-delete="${escapeAttr(e.name)}">Event löschen</button>
+        </div>`;
+      box.appendChild(card);
     });
+
+    $$('[data-event-use]', box).forEach(button => button.onclick = () => requestEventSwitch(button.dataset.eventUse, () => renderEventsPage()));
+    $$('[data-event-edit]', box).forEach(button => button.onclick = () => editEvent(button.dataset.eventEdit));
+    $$('[data-event-reset]', box).forEach(button => button.onclick = () => resetEvent(button.dataset.eventReset));
+    $$('[data-event-delete]', box).forEach(button => button.onclick = () => deleteEvent(button.dataset.eventDelete));
+  }
+
+  function eventOrders(name) {
+    return state.data.orders.filter(o => o.eventName === name || (!o.eventName && name === state.data.currentEvent));
+  }
+
+  function editEvent(oldName) {
+    const event = state.data.events.find(e => e.name === oldName);
+    if (!event) return;
+    modal(`<h2>Event bearbeiten</h2><div class="form-grid"><div class="field"><label>Name</label><input id="editEventName" value="${escapeAttr(oldName)}"></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="saveEventEdit" class="action-button">Änderung speichern</button></div></div>`);
+    $('#saveEventEdit').onclick = () => {
+      const newName = norm($('#editEventName').value);
+      if (!newName) return toast('Bitte einen Eventnamen eingeben');
+      const duplicate = state.data.events.some(e => e !== event && e.name.toLocaleLowerCase('de-DE') === newName.toLocaleLowerCase('de-DE'));
+      if (duplicate) return toast('Ein Event mit diesem Namen existiert bereits');
+      if (newName === oldName) { closeModal(); return; }
+      event.name = newName;
+      state.data.orders.forEach(o => { if (o.eventName === oldName) o.eventName = newName; });
+      if (state.data.currentEvent === oldName) state.data.currentEvent = newName;
+      state.data.events.forEach(e => e.isActive = e.name === state.data.currentEvent);
+      save(); closeModal(); renderEventsPage(); toast('Event wurde umbenannt');
+    };
+  }
+
+  function resetEvent(name) {
+    const count = eventOrders(name).length;
+    const isCurrent = name === state.data.currentEvent;
+    modal(`<h2>Event zurücksetzen?</h2><div class="card"><div class="line-title">${escapeHtml(name)}</div><div class="small-muted">${count ? `${count} ${count === 1 ? 'gespeicherte Bestellung wird' : 'gespeicherte Bestellungen werden'} gelöscht.` : 'Es sind noch keine gespeicherten Bestellungen vorhanden.'}<br><br>Artikel, Gruppen und Einstellungen bleiben erhalten.${isCurrent ? ' Eine aktuell offene Bestellung wird ebenfalls geleert.' : ''}</div></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="confirmEventReset" class="danger-button">Wirklich zurücksetzen</button></div>`);
+    $('#confirmEventReset').onclick = () => {
+      state.data.orders = state.data.orders.filter(o => !(o.eventName === name || (!o.eventName && isCurrent)));
+      if (isCurrent) { state.order = []; state.note = ''; }
+      save(); closeModal(); renderEventsPage(); toast('Event wurde zurückgesetzt');
+    };
+  }
+
+  function deleteEvent(name) {
+    const event = state.data.events.find(e => e.name === name);
+    if (!event) return;
+    const count = eventOrders(name).length;
+    const isCurrent = name === state.data.currentEvent;
+    const remaining = state.data.events.filter(e => e !== event);
+    modal(`<h2>Event löschen?</h2><div class="card"><div class="line-title">${escapeHtml(name)}</div><div class="small-muted">Das Event wird vollständig entfernt.${count ? ` Dabei ${count === 1 ? 'wird 1 gespeicherte Bestellung' : `werden ${count} gespeicherte Bestellungen`} und die zugehörige Statistik gelöscht.` : ''}${isCurrent ? '<br><br>Das Event ist aktuell aktiv. Danach wird automatisch ein anderes Event aktiviert.' : ''}</div></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="confirmEventDelete" class="danger-button">Event endgültig löschen</button></div>`);
+    $('#confirmEventDelete').onclick = () => {
+      state.data.orders = state.data.orders.filter(o => !(o.eventName === name || (!o.eventName && isCurrent)));
+      state.data.events = remaining;
+      if (!state.data.events.length) state.data.events.push({ name: 'Standard-Event', createdAt: nowIso(), isActive: true });
+      if (isCurrent) {
+        state.order = []; state.note = '';
+        state.data.currentEvent = state.data.events[0].name;
+      }
+      state.data.events.forEach(e => e.isActive = e.name === state.data.currentEvent);
+      save(); closeModal(); renderEventsPage(); toast('Event wurde gelöscht');
+    };
   }
   function requestEventSwitch(name, after = null) {
     if (name === state.data.currentEvent) { after?.(); return; }

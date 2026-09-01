@@ -108,9 +108,16 @@ Große Bedienungs- und Verwaltungsoptimierung:
 - Optionaler lokaler Verwaltungs-PIN für Event, Artikelstamm und Einstellungen.
 
 
-## Version 1.1.1
+## Version 1.1.2
 
 - Schnelles mehrfaches Tippen auf Artikelkacheln zaehlt jetzt unmittelbar und stabil nach oben.
 - Die Artikelansicht wird beim Hinzufuegen nicht mehr nach jedem Tap komplett neu aufgebaut; nur das Mengenbadge wird aktualisiert.
 - Langes Druecken zum Entfernen reagiert erst nach ca. 0,9 Sekunden und wird bei Fingerbewegung abgebrochen.
 - Browser-Kontextmenue/Touch-Callout auf Artikelkacheln unterdrueckt, damit langes Druecken nicht mit der Bedienung kollidiert.
+
+
+### Eventverwaltung ab Version 1.1.2
+- Events können umbenannt werden; vorhandene Bestellungen bleiben dem umbenannten Event zugeordnet.
+- Events können zurückgesetzt werden. Dabei werden Bestellhistorie und Statistik dieses Events geleert, Artikel/Gruppen bleiben erhalten.
+- Events können vollständig gelöscht werden. Die zugehörige Bestellhistorie wird nach Sicherheitsabfrage mit gelöscht.
+- Wird das aktive Event gelöscht, aktiviert die App automatisch ein anderes Event; falls kein weiteres vorhanden ist, wird ein neues Standard-Event angelegt.
