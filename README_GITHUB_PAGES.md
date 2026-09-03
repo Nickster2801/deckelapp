@@ -158,3 +158,57 @@ Hinweis: Auf Smartphones kann der Browser das zweite Fenster als neuen Tab öffn
 - Produktpreis und Pfandsumme werden getrennt rechts angezeigt; Gesamtbetrag bleibt unten groß sichtbar.
 - Artikelsymbole werden aus dem Artikelstamm in die Kundenanzeige übernommen.
 - Keine Scrollanzeige; bei vielen Positionen verdichtet sich die Darstellung automatisch.
+
+
+## Version 1.1.8
+- Trinkgeld ist im Bezahlvorgang separat erfassbar.
+- Schnellbuttons: 0 €, +0,50 €, +1 €, +2 € und +5 €.
+- Freier Trinkgeldbetrag kann eingegeben werden.
+- Vorhandenes Rückgeld kann mit einem Tipp als Trinkgeld übernommen werden.
+- Trinkgeld wird getrennt von Bestellumsatz, erhaltenem Betrag und Rückgeld gespeichert.
+- Historie zeigt Trinkgeld und Gesamtbetrag inklusive Trinkgeld getrennt an.
+- Statistik zeigt Umsatz ohne Trinkgeld, Trinkgeld, Gesamteinnahmen und Trinkgeld heute separat.
+
+
+## Kasse (Version 1.1.8)
+- Eigener Bereich **Kasse** im Burgermenü.
+- Anfangsbestand pro Event/Kassenlauf festlegen.
+- Erwarteter Bestand wird automatisch aus Verkäufen, Pfandbewegungen und Trinkgeld seit Kassenstart berechnet.
+- Beim Abschluss wird der tatsächliche Bestand eingetragen und die Differenz als Kasse stimmt, Mehrbestand oder Fehlbetrag ausgewiesen.
+- Abgeschlossene Kassenläufe bleiben mit Soll/Ist/Differenz und Zeitraum nachvollziehbar.
+- Danach kann eine neue Kasse gestartet werden.
+
+
+## Version 1.1.9 – Kassenabschluss mit Bemerkung
+- Beim Kassenabschluss bleibt der tatsächliche gezählte Kassenbestand frei eintragbar.
+- Soll-/Ist-Differenz wird weiterhin automatisch berechnet und gespeichert.
+- Optionales Feld „Bemerkung zur Differenz“ ergänzt.
+- Die Bemerkung wird mit dem Kassenabschluss gespeichert und in der Abschluss-Historie angezeigt.
+- Bestehende Abschlüsse ohne Bemerkung bleiben kompatibel.
+
+
+## Version 1.1.10 – Kassenarchiv
+
+Im Bereich **Kasse** sind abgeschlossene und archivierte Kassenläufe jetzt gemeinsam verwaltbar:
+
+- normale Kassenabschlüsse: **Archivieren** oder **Löschen**
+- archivierte Kassenabschlüsse: eigener Abschnitt direkt im Bereich **Kasse**
+- Archiv: **Wiederherstellen** oder **Endgültig löschen**
+- vor Archivierung und Löschung erscheint eine Sicherheitsabfrage
+- Archivstatus wird im lokalen Backup automatisch mitgesichert
+
+
+## Version 1.1.11 – Kassenarchiv als eigene Ansicht
+- Archivierte Kassenabschlüsse werden nicht mehr direkt unter der laufenden Kasse angezeigt.
+- Oben rechts im Bereich Kasse gibt es den Button „Archiv“ mit Anzahl der archivierten Abschlüsse.
+- Der Button öffnet eine eigene Archivansicht.
+- Dort können Abschlüsse wiederhergestellt oder endgültig gelöscht werden.
+
+
+## Version 1.1.12 – Bestellnavigation optimiert
+
+- Der feste Button „Bestellung anzeigen“ am unteren Bildschirmrand wird nur noch im Bereich „Bestellungen“ angezeigt.
+- In Event, Artikelstamm, Historie, Kasse, Statistik und Einstellungen steht oben rechts ein kompakter Shortcut „Bestellung“.
+- Bei einer offenen Bestellung zeigt der Shortcut auf größeren Bildschirmen zusätzlich Artikelanzahl und Gesamtbetrag.
+- Auf kleinen Displays wird der Shortcut automatisch kompakter dargestellt.
+- Verwaltungsseiten nutzen ohne den unteren Bestellbutton die zusätzliche Bildschirmhöhe.

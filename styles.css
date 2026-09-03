@@ -61,8 +61,45 @@ button { touch-action: manipulation; }
 .brand { font-size: 24px; font-weight: 800; line-height: 1.05; }
 .event-label { color: var(--muted); font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ghost-button { min-height: 42px; border: 1px solid var(--line); background: var(--card2); color: var(--text); border-radius: 14px; padding: 0 12px; font-weight: 800; }
+
+.order-shortcut {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  white-space: nowrap;
+  color: var(--text);
+}
+.order-shortcut-icon { font-size: 18px; line-height: 1; }
+.order-shortcut-label { font-weight: 900; }
+.order-shortcut-summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 900;
+}
+.order-shortcut.has-items {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
+}
+@media (max-width: 520px) {
+  .order-shortcut-summary { display: none; }
+  .order-shortcut { padding: 0 10px; }
+}
+@media (max-width: 360px) {
+  .order-shortcut-icon { display: none; }
+  .order-shortcut { padding: 0 9px; font-size: 13px; }
+}
 .hidden { display: none !important; }
-.content { padding: 12px 12px calc(94px + var(--safe-bottom)); max-width: 980px; margin: 0 auto; }
+.content { padding: 12px 12px calc(18px + var(--safe-bottom)); max-width: 980px; margin: 0 auto; }
+.content.has-bottom-order { padding-bottom: calc(94px + var(--safe-bottom)); }
 .page-title { color: var(--muted); text-align: center; font-size: 18px; font-weight: 800; margin: 2px 0 12px; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 12px; margin-bottom: 10px; box-shadow: 0 12px 28px var(--card-shadow); }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
@@ -189,6 +226,33 @@ html[data-theme="light"] .topbar { box-shadow: 0 4px 18px rgba(25,35,52,.05); }
 @media (min-width: 600px) {
   .payment-quick-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .payment-keypad button { min-height: 64px; }
+}
+
+/* Trinkgeld im Bezahlvorgang */
+.payment-tip-card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 11px; display: grid; gap: 9px; }
+.payment-tip-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+.payment-tip-value { color: var(--gold); font-size: 25px; line-height: 1.05; font-weight: 900; margin-top: 3px; }
+.payment-tip-custom-button { min-height: 44px; width: auto; flex: 0 0 auto; }
+.payment-tip-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.payment-tip-button { min-height: 46px; border-radius: 13px; border: 1px solid var(--line); background: var(--card2); color: var(--text); font-weight: 900; font-size: 15px; padding: 7px 8px; }
+.payment-tip-button:active { transform: scale(.98); background: var(--accent); color: #fff; }
+.payment-tip-button.reset { color: var(--muted); }
+.payment-tip-custom { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.payment-tip-custom.hidden { display: none; }
+.payment-tip-custom input { min-width: 0; font-size: 18px; font-weight: 800; }
+.payment-due-summary { min-height: 54px; border-radius: 16px; border: 1px solid color-mix(in srgb, var(--gold) 50%, var(--line)); background: color-mix(in srgb, var(--gold) 8%, var(--card)); padding: 9px 13px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.payment-due-summary span { color: var(--muted); font-weight: 800; }
+.payment-due-summary strong { color: var(--gold); font-size: 22px; white-space: nowrap; }
+.payment-change-tip { width: 100%; min-height: 46px; }
+.payment-change-tip:disabled { opacity: .42; }
+@media (min-width: 600px) {
+  .payment-tip-row { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+@media (max-width: 380px) {
+  .payment-tip-head { align-items: stretch; flex-direction: column; }
+  .payment-tip-custom-button { width: 100%; }
+  .payment-tip-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .payment-due-summary { align-items: flex-start; flex-direction: column; gap: 3px; }
 }
 
 /* Kontrast für violette Aktionsflächen in beiden Themes */
@@ -322,4 +386,129 @@ html[data-theme="light"] .topbar { box-shadow: 0 4px 18px rgba(25,35,52,.05); }
   background: var(--card2);
   color: var(--muted);
   font-weight: 900;
+}
+
+
+/* Kasse */
+.cash-intro .line-title { margin-bottom: 5px; }
+.cash-title-row { justify-content: space-between; }
+.cash-expected-card { text-align: center; padding: 18px 14px; }
+.cash-expected-value { color: var(--gold); font-size: clamp(30px, 8vw, 46px); line-height: 1.1; font-weight: 950; margin: 5px 0; }
+.cash-history-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+.cash-diff { border:1px solid var(--line); border-radius:999px; padding:6px 9px; font-size:12px; font-weight:900; white-space:nowrap; }
+.cash-diff-ok, .cash-close-difference.cash-diff-ok { color:var(--ok); }
+.cash-diff-plus, .cash-close-difference.cash-diff-plus { color:var(--gold); }
+.cash-diff-minus, .cash-close-difference.cash-diff-minus { color:var(--dangerText); }
+.cash-history-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin-top:12px; }
+.cash-history-grid > div { min-width:0; background:var(--card2); border:1px solid var(--line); border-radius:13px; padding:8px; }
+.cash-history-grid span { display:block; color:var(--muted); font-size:11px; font-weight:800; }
+.cash-history-grid strong { display:block; margin-top:3px; font-size:14px; overflow-wrap:anywhere; }
+.cash-close-result { text-align:center; margin-bottom:0; }
+.cash-close-difference { font-size:24px; font-weight:950; margin:4px 0; }
+.cash-modal-stats { margin-bottom:0; }
+@media (max-width: 460px) {
+  .cash-history-head { flex-direction:column; }
+  .cash-history-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .cash-stats-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+
+/* Kassenabschluss 1.1.9 */
+.cash-note {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--text);
+}
+.cash-note > span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.cash-note > div {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 84px;
+}
+
+
+/* Kassenarchiv 1.1.10 */
+.cash-history-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.cash-history-actions > button {
+  width: 100%;
+  min-width: 0;
+}
+.cash-archive-date {
+  margin-top: 8px;
+}
+@media (max-width: 420px) {
+  .cash-history-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Kassenarchiv-Button 1.1.11 */
+.cash-page-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin: 2px 0 14px;
+}
+.cash-page-header .page-title {
+  margin: 0;
+  text-align: left;
+  min-width: 0;
+}
+.cash-archive-button {
+  width: auto;
+  min-width: 118px;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.cash-archive-button .group-count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 900;
+}
+.cash-archive-page-header > div { min-width: 0; }
+.cash-archive-page-header .small-muted { margin-top: 4px; }
+@media (max-width: 420px) {
+  .cash-page-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+  .cash-page-title { font-size: 16px; }
+  .cash-archive-button {
+    min-width: 96px;
+    min-height: 44px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
 }

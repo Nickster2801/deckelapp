@@ -10,11 +10,11 @@
   const num = (v) => Number(String(v ?? '').replace('€', '').replace(',', '.').trim()) || 0;
 
 
-  const APP_VERSION = '1.1.6';
+  const APP_VERSION = '1.1.12';
   const PREFS_KEY = 'deckelapp-prefs-v1';
   const PIN_ENABLED_KEY = 'deckelapp-admin-pin-enabled';
   const PIN_HASH_KEY = 'deckelapp-admin-pin-hash';
-  const ADMIN_PAGES = new Set(['events', 'articles', 'settings']);
+  const ADMIN_PAGES = new Set(['events', 'articles', 'cash', 'settings']);
 
   function loadPrefs() {
     const defaults = {
@@ -92,7 +92,8 @@
     ],
     events: [{ name: 'Standard-Event', createdAt: nowIso(), isActive: true }],
     currentEvent: 'Standard-Event',
-    orders: []
+    orders: [],
+    cashSessions: []
   };
   defaults.articles.forEach((x, i) => x.sortOrder = i);
   function a(name, price, group, hasDeposit, depositPrice, favorite, icon) {
@@ -111,7 +112,8 @@
           articles: Array.isArray(data.articles) && data.articles.length ? data.articles.map(x => ({ id: x.id || id(), icon: x.icon || '🥤', visible: x.visible !== false, ...x })) : structuredClone(defaults.articles),
           events: Array.isArray(data.events) && data.events.length ? data.events : structuredClone(defaults.events),
           currentEvent: data.currentEvent || 'Standard-Event',
-          orders: Array.isArray(data.orders) ? data.orders : []
+          orders: Array.isArray(data.orders) ? data.orders : [],
+          cashSessions: Array.isArray(data.cashSessions) ? data.cashSessions : []
         };
       } catch { return structuredClone(defaults); }
     },
@@ -139,6 +141,7 @@
   const el = {
     content: $('#content'), drawer: $('#drawer'), scrim: $('#scrim'), menuButton: $('#menuButton'),
     eventLabel: $('#eventLabel'), drawerEvent: $('#drawerEvent'), orderButton: $('#orderButton'),
+    orderShortcut: $('#orderShortcut'), orderShortcutSummary: $('#orderShortcutSummary'),
     sheet: $('#orderSheet'), closeSheet: $('#closeSheet'), orderLines: $('#orderLines'), modalHost: $('#modalHost'),
     toast: $('#toast'), installButton: $('#installButton'), appVersion: $('#appVersion'),
     updateBanner: $('#updateBanner'), updateButton: $('#updateButton'), updateLaterButton: $('#updateLaterButton')
@@ -320,6 +323,7 @@
   el.menuButton.addEventListener('click', openDrawer);
   el.scrim.addEventListener('click', () => { closeDrawer(); closeSheet(); });
   el.orderButton.addEventListener('click', openSheet);
+  el.orderShortcut?.addEventListener('click', () => showPage('orders'));
   el.closeSheet.addEventListener('click', closeSheet);
   $$('.drawer-item').forEach(b => b.addEventListener('click', async () => { await showPage(b.dataset.page); closeDrawer(); }));
 
@@ -345,11 +349,20 @@
     el.drawerEvent.textContent = state.data.currentEvent;
     if (el.appVersion) el.appVersion.textContent = `Version ${APP_VERSION}`;
     $$('.drawer-item').forEach(b => b.classList.toggle('active', b.dataset.page === state.page));
+
+    const onOrdersPage = state.page === 'orders';
+    el.orderButton.classList.toggle('hidden', !onOrdersPage);
+    el.orderShortcut?.classList.toggle('hidden', onOrdersPage);
+    el.content.classList.toggle('has-bottom-order', onOrdersPage);
   }
   function updateOrderButton() {
     const count = orderCount();
-    el.orderButton.textContent = `📝 Bestellung anzeigen   ${count} Artikel | ${fmt(orderTotal())}`;
-    el.orderButton.classList.toggle('has-items', count > 0 || Math.abs(orderTotal()) > 0.0001);
+    const total = orderTotal();
+    const hasItems = count > 0 || Math.abs(total) > 0.0001;
+    el.orderButton.textContent = `📝 Bestellung anzeigen   ${count} Artikel | ${fmt(total)}`;
+    el.orderButton.classList.toggle('has-items', hasItems);
+    if (el.orderShortcutSummary) el.orderShortcutSummary.textContent = hasItems ? `${count} · ${fmt(total)}` : 'leer';
+    el.orderShortcut?.classList.toggle('has-items', hasItems);
     broadcastCustomerDisplay();
   }
 
@@ -359,11 +372,14 @@
       requestAdminPin(() => showPage(target, true));
       return false;
     }
-    state.page = target; updateHeader();
+    state.page = target;
+    if (state.page !== 'orders') closeSheet();
+    updateHeader();
     if (state.page === 'orders') renderOrdersPage();
     else if (state.page === 'events') renderEventsPage();
     else if (state.page === 'articles') renderArticlesPage();
     else if (state.page === 'history') renderHistoryPage();
+    else if (state.page === 'cash') renderCashPage();
     else if (state.page === 'stats') renderStatsPage();
     else if (state.page === 'settings') renderSettingsPage();
     return true;
@@ -575,17 +591,18 @@
     if (!state.order.length) return;
     const total = orderTotal();
 
-    const finish = (received) => {
+    const finish = (received, tip = 0) => {
       const previousOrder = state.order.map(x => ({...x}));
       const previousNote = state.note;
-      const savedOrder = { id:id(), date: nowIso(), eventName: state.data.currentEvent, note: previousNote, received, lines: previousOrder.map(x => ({...x})) };
+      const safeTip = Math.max(0, Number(tip) || 0);
+      const savedOrder = { id:id(), date: nowIso(), eventName: state.data.currentEvent, note: previousNote, received, tip: safeTip, lines: previousOrder.map(x => ({...x})) };
       state.data.orders.push(savedOrder);
       state.order = []; state.note = ''; markCustomerChange('Bestellung abgeschlossen', 0); save(); closeModal(); closeSheet(); renderArticleGroups();
       toast('✓ Bestellung gespeichert', 'Rückgängig', () => undoCompletedOrder(savedOrder, previousOrder, previousNote), 5600);
     };
 
     // Bei einem reinen Null-/Auszahlungsbetrag bleibt die bestehende Logik erhalten,
-    // ohne einen unpassenden Bezahl-Nummernblock einzublenden.
+    // ohne Trinkgeld- oder Bezahl-Nummernblock.
     if (total <= 0) {
       modal(`<div class="payment-view">
         <h2 class="payment-title">Bestellung abschließen</h2>
@@ -598,29 +615,54 @@
           <button id="finishOrder" class="action-button">✓ Bestellung abschließen</button>
         </div>
       </div>`);
-      $('#finishOrder').onclick = () => finish(total);
+      $('#finishOrder').onclick = () => finish(total, 0);
       return;
     }
 
     let receivedText = '0';
-    const quickAmounts = paymentQuickAmounts(total);
+    let tip = 0;
+    let lastQuickDue = null;
     modal(`<div class="payment-view">
       <h2 class="payment-title">Bezahlung</h2>
       <div class="payment-total-card">
-        <div class="small-muted">Zu bezahlen</div>
+        <div class="small-muted">Bestellung</div>
         <div class="payment-total">${fmt(total)}</div>
       </div>
+
+      <div class="payment-tip-card">
+        <div class="payment-tip-head">
+          <div>
+            <div class="small-muted">Trinkgeld</div>
+            <div id="tipDisplay" class="payment-tip-value">${fmt(0)}</div>
+          </div>
+          <button type="button" id="tipCustomButton" class="secondary-button payment-tip-custom-button">Betrag eingeben</button>
+        </div>
+        <div class="payment-tip-row">
+          <button type="button" class="payment-tip-button reset" data-tip-reset>0 €</button>
+          <button type="button" class="payment-tip-button" data-tip-add="0.5">+0,50 €</button>
+          <button type="button" class="payment-tip-button" data-tip-add="1">+1 €</button>
+          <button type="button" class="payment-tip-button" data-tip-add="2">+2 €</button>
+          <button type="button" class="payment-tip-button" data-tip-add="5">+5 €</button>
+        </div>
+        <div id="tipCustomRow" class="payment-tip-custom hidden">
+          <input id="tipCustomInput" inputmode="decimal" value="0,00" aria-label="Trinkgeldbetrag">
+          <button type="button" id="tipCustomApply" class="action-button">Übernehmen</button>
+        </div>
+      </div>
+
+      <div class="payment-due-summary">
+        <span>Gesamt inkl. Trinkgeld</span><strong id="amountDueDisplay">${fmt(total)}</strong>
+      </div>
+
       <div class="payment-received-card">
         <div class="small-muted">Erhalten</div>
         <div id="receivedDisplay" class="payment-received">${fmt(0)}</div>
       </div>
-      <div class="payment-quick-row">
-        ${quickAmounts.map(v => `<button type="button" class="payment-quick-button" data-quick="${v}">${fmt(v)}</button>`).join('')}
-        <button type="button" id="payExact" class="payment-quick-button exact">Passend</button>
-      </div>
+      <div id="paymentQuickRow" class="payment-quick-row"></div>
       <div id="paymentBalance" class="payment-balance open">
         <span>Noch offen</span><strong>${fmt(total)}</strong>
       </div>
+      <button type="button" id="changeAsTip" class="secondary-button payment-change-tip" disabled>Rückgeld als Trinkgeld</button>
       <div class="payment-keypad" aria-label="Nummernblock für erhaltenen Betrag">
         <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button>
         <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button>
@@ -634,31 +676,80 @@
     </div>`);
 
     const display = $('#receivedDisplay');
+    const tipDisplay = $('#tipDisplay');
+    const amountDueDisplay = $('#amountDueDisplay');
     const balance = $('#paymentBalance');
     const finishButton = $('#finishOrder');
+    const changeAsTipButton = $('#changeAsTip');
+    const quickRow = $('#paymentQuickRow');
+    const customRow = $('#tipCustomRow');
+    const customInput = $('#tipCustomInput');
+
+    const amountDue = () => total + tip;
 
     const setReceived = (value) => {
-      receivedText = String(Number(value).toFixed(2)).replace('.', ',');
+      receivedText = String(Math.max(0, Number(value) || 0).toFixed(2)).replace('.', ',');
       refreshPayment();
+    };
+
+    const renderReceivedQuickAmounts = () => {
+      const due = amountDue();
+      if (lastQuickDue !== null && Math.abs(lastQuickDue - due) < 0.0001) return;
+      lastQuickDue = due;
+      const quickAmounts = paymentQuickAmounts(due);
+      quickRow.innerHTML = `${quickAmounts.map(v => `<button type="button" class="payment-quick-button" data-quick="${v}">${fmt(v)}</button>`).join('')}<button type="button" id="payExact" class="payment-quick-button exact">Passend</button>`;
+      $$('[data-quick]', quickRow).forEach(button => button.onclick = () => setReceived(Number(button.dataset.quick)));
+      $('#payExact', quickRow).onclick = () => setReceived(amountDue());
     };
 
     const refreshPayment = () => {
       const received = num(receivedText);
+      const due = amountDue();
+      const difference = received - due;
       display.textContent = fmt(received);
-      const difference = received - total;
+      tipDisplay.textContent = fmt(tip);
+      amountDueDisplay.textContent = fmt(due);
+      renderReceivedQuickAmounts();
       if (difference >= -0.0001) {
+        const change = Math.max(0, difference);
         balance.className = 'payment-balance change';
-        balance.innerHTML = `<span>Rückgeld</span><strong>${fmt(Math.max(0, difference))}</strong>`;
+        balance.innerHTML = `<span>Rückgeld</span><strong>${fmt(change)}</strong>`;
         finishButton.disabled = false;
+        changeAsTipButton.disabled = change <= 0.0001;
       } else {
         balance.className = 'payment-balance open';
         balance.innerHTML = `<span>Noch offen</span><strong>${fmt(Math.abs(difference))}</strong>`;
         finishButton.disabled = true;
+        changeAsTipButton.disabled = true;
       }
     };
 
-    $$('[data-quick]', el.modalHost).forEach(button => button.onclick = () => setReceived(Number(button.dataset.quick)));
-    $('#payExact').onclick = () => setReceived(total);
+    $('[data-tip-reset]', el.modalHost).onclick = () => { tip = 0; refreshPayment(); };
+    $$('[data-tip-add]', el.modalHost).forEach(button => button.onclick = () => {
+      tip = Math.round((tip + Number(button.dataset.tipAdd || 0)) * 100) / 100;
+      refreshPayment();
+    });
+    $('#tipCustomButton').onclick = () => {
+      customInput.value = tip.toFixed(2).replace('.', ',');
+      customRow.classList.toggle('hidden');
+      if (!customRow.classList.contains('hidden')) setTimeout(() => customInput.focus(), 0);
+    };
+    $('#tipCustomApply').onclick = () => {
+      const value = num(customInput.value);
+      if (value < 0) { toast('Bitte gültigen Trinkgeldbetrag eingeben'); return; }
+      tip = Math.round(value * 100) / 100;
+      customRow.classList.add('hidden');
+      refreshPayment();
+    };
+    changeAsTipButton.onclick = () => {
+      const received = num(receivedText);
+      const change = received - amountDue();
+      if (change <= 0.0001) return;
+      tip = Math.round((tip + change) * 100) / 100;
+      refreshPayment();
+      toast('Rückgeld als Trinkgeld übernommen');
+    };
+
     $$('[data-key]', el.modalHost).forEach(button => button.onclick = () => {
       const key = button.dataset.key;
       if (key === 'back') {
@@ -675,8 +766,9 @@
     });
     finishButton.onclick = () => {
       const received = num(receivedText);
-      if (received + 0.0001 < total) { toast('Betrag noch nicht vollständig'); return; }
-      finish(received);
+      const due = amountDue();
+      if (received + 0.0001 < due) { toast('Betrag noch nicht vollständig'); return; }
+      finish(received, tip);
     };
     refreshPayment();
   }
@@ -899,6 +991,7 @@
       if (newName === oldName) { closeModal(); return; }
       event.name = newName;
       state.data.orders.forEach(o => { if (o.eventName === oldName) o.eventName = newName; });
+      (state.data.cashSessions || []).forEach(c => { if (c.eventName === oldName) c.eventName = newName; });
       if (state.data.currentEvent === oldName) state.data.currentEvent = newName;
       state.data.events.forEach(e => e.isActive = e.name === state.data.currentEvent);
       save(); closeModal(); renderEventsPage(); toast('Event wurde umbenannt');
@@ -911,6 +1004,7 @@
     modal(`<h2>Event zurücksetzen?</h2><div class="card"><div class="line-title">${escapeHtml(name)}</div><div class="small-muted">${count ? `${count} ${count === 1 ? 'gespeicherte Bestellung wird' : 'gespeicherte Bestellungen werden'} gelöscht.` : 'Es sind noch keine gespeicherten Bestellungen vorhanden.'}<br><br>Artikel, Gruppen und Einstellungen bleiben erhalten.${isCurrent ? ' Eine aktuell offene Bestellung wird ebenfalls geleert.' : ''}</div></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="confirmEventReset" class="danger-button">Wirklich zurücksetzen</button></div>`);
     $('#confirmEventReset').onclick = () => {
       state.data.orders = state.data.orders.filter(o => !(o.eventName === name || (!o.eventName && isCurrent)));
+      state.data.cashSessions = (state.data.cashSessions || []).filter(c => c.eventName !== name);
       if (isCurrent) { state.order = []; state.note = ''; }
       save(); closeModal(); renderEventsPage(); toast('Event wurde zurückgesetzt');
     };
@@ -925,6 +1019,7 @@
     modal(`<h2>Event löschen?</h2><div class="card"><div class="line-title">${escapeHtml(name)}</div><div class="small-muted">Das Event wird vollständig entfernt.${count ? ` Dabei ${count === 1 ? 'wird 1 gespeicherte Bestellung' : `werden ${count} gespeicherte Bestellungen`} und die zugehörige Statistik gelöscht.` : ''}${isCurrent ? '<br><br>Das Event ist aktuell aktiv. Danach wird automatisch ein anderes Event aktiviert.' : ''}</div></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="confirmEventDelete" class="danger-button">Event endgültig löschen</button></div>`);
     $('#confirmEventDelete').onclick = () => {
       state.data.orders = state.data.orders.filter(o => !(o.eventName === name || (!o.eventName && isCurrent)));
+      state.data.cashSessions = (state.data.cashSessions || []).filter(c => c.eventName !== name);
       state.data.events = remaining;
       if (!state.data.events.length) state.data.events.push({ name: 'Standard-Event', createdAt: nowIso(), isActive: true });
       if (isCurrent) {
@@ -948,6 +1043,201 @@
     if (!state.data.events.some(e=>e.name===name)) state.data.events.push({name,createdAt:nowIso(),isActive:true});
     state.data.events.forEach(e=>e.isActive=e.name===name); save();
   }
+  function cashSessionsForEvent(name = state.data.currentEvent) {
+    return (state.data.cashSessions || []).filter(x => x.eventName === name);
+  }
+  function activeCashSession(name = state.data.currentEvent) {
+    return cashSessionsForEvent(name).find(x => !x.closedAt) || null;
+  }
+  function ordersForCashSession(session, until = null) {
+    if (!session) return [];
+    const start = new Date(session.startedAt).getTime();
+    const end = until ? new Date(until).getTime() : Infinity;
+    return state.data.orders.filter(o => {
+      if ((o.eventName || state.data.currentEvent) !== session.eventName) return false;
+      const t = new Date(o.date).getTime();
+      return Number.isFinite(t) && t >= start && t <= end;
+    });
+  }
+  function cashSessionSummary(session, until = null) {
+    const orders = ordersForCashSession(session, until);
+    const sales = orders.reduce((sum, o) => sum + totalOf(o), 0);
+    const tips = orders.reduce((sum, o) => sum + tipOf(o), 0);
+    const movement = sales + tips;
+    const expected = Number(session?.openingBalance || 0) + movement;
+    return { orders, sales, tips, movement, expected };
+  }
+  function cashDifferenceLabel(value) {
+    const diff = Number(value || 0);
+    if (Math.abs(diff) < 0.005) return 'Kasse stimmt';
+    return diff > 0 ? `Mehrbestand ${fmt(diff)}` : `Fehlbetrag ${fmt(Math.abs(diff))}`;
+  }
+  function cashDifferenceClass(value) {
+    const diff = Number(value || 0);
+    if (Math.abs(diff) < 0.005) return 'cash-diff-ok';
+    return diff > 0 ? 'cash-diff-plus' : 'cash-diff-minus';
+  }
+  function makeCashHistoryCard(c, isArchived) {
+    const diff = Number(c.difference || 0);
+    const card = document.createElement('div');
+    card.className = 'card cash-history-card';
+    card.innerHTML = `
+      <div class="cash-history-head"><div><div class="line-title">${escapeHtml(new Date(c.closedAt).toLocaleString('de-DE'))}</div><div class="line-meta">Start: ${escapeHtml(new Date(c.startedAt).toLocaleString('de-DE'))}</div></div><span class="cash-diff ${cashDifferenceClass(diff)}">${escapeHtml(cashDifferenceLabel(diff))}</span></div>
+      <div class="cash-history-grid">
+        <div><span>Anfang</span><strong>${fmt(c.openingBalance)}</strong></div>
+        <div><span>Verkäufe/Pfand</span><strong>${fmt(c.salesAtClose)}</strong></div>
+        <div><span>Trinkgeld</span><strong>${fmt(c.tipsAtClose)}</strong></div>
+        <div><span>Soll</span><strong>${fmt(c.expectedBalanceAtClose)}</strong></div>
+        <div><span>Ist</span><strong>${fmt(c.actualBalance)}</strong></div>
+        <div><span>Differenz</span><strong>${diff >= 0 ? '+' : '−'}${fmt(Math.abs(diff))}</strong></div>
+      </div>
+      <div class="small-muted" style="margin-top:8px">${Number(c.orderCountAtClose || 0)} ${Number(c.orderCountAtClose || 0) === 1 ? 'Bestellung' : 'Bestellungen'}</div>
+      ${c.note ? `<div class="cash-note"><span>Bemerkung</span><div>${escapeHtml(c.note)}</div></div>` : ''}
+      ${isArchived && c.archivedAt ? `<div class="small-muted cash-archive-date">Archiviert am ${escapeHtml(new Date(c.archivedAt).toLocaleString('de-DE'))}</div>` : ''}
+      <div class="cash-history-actions">
+        ${isArchived
+          ? `<button class="secondary-button" data-cash-restore="${escapeAttr(c.id)}">Wiederherstellen</button><button class="danger-button" data-cash-delete="${escapeAttr(c.id)}">Endgültig löschen</button>`
+          : `<button class="secondary-button" data-cash-archive="${escapeAttr(c.id)}">Archivieren</button><button class="danger-button" data-cash-delete="${escapeAttr(c.id)}">Löschen</button>`}
+      </div>`;
+    return card;
+  }
+
+  function bindCashHistoryActions(rerender) {
+    $$('[data-cash-archive]').forEach(btn => btn.addEventListener('click', () => {
+      const c = (state.data.cashSessions || []).find(x => x.id === btn.dataset.cashArchive);
+      if (!c) return;
+      if (!confirm(`Kassenabschluss vom ${new Date(c.closedAt).toLocaleString('de-DE')} archivieren?`)) return;
+      c.archivedAt = nowIso();
+      save(); rerender(); toast('Kassenabschluss archiviert');
+    }));
+
+    $$('[data-cash-restore]').forEach(btn => btn.addEventListener('click', () => {
+      const c = (state.data.cashSessions || []).find(x => x.id === btn.dataset.cashRestore);
+      if (!c) return;
+      delete c.archivedAt;
+      save(); rerender(); toast('Kassenabschluss wiederhergestellt');
+    }));
+
+    $$('[data-cash-delete]').forEach(btn => btn.addEventListener('click', () => {
+      const c = (state.data.cashSessions || []).find(x => x.id === btn.dataset.cashDelete);
+      if (!c) return;
+      const archivedText = c.archivedAt ? 'archivierten ' : '';
+      if (!confirm(`${archivedText}Kassenabschluss vom ${new Date(c.closedAt).toLocaleString('de-DE')} wirklich endgültig löschen?\n\nDieser Vorgang kann nicht rückgängig gemacht werden.`)) return;
+      state.data.cashSessions = (state.data.cashSessions || []).filter(x => x.id !== c.id);
+      save(); rerender(); toast('Kassenabschluss gelöscht');
+    }));
+  }
+
+  function renderCashPage() {
+    const session = activeCashSession();
+    const eventSessions = cashSessionsForEvent();
+    const closed = eventSessions.filter(x => x.closedAt && !x.archivedAt).sort((a,b) => new Date(b.closedAt) - new Date(a.closedAt));
+    const archived = eventSessions.filter(x => x.closedAt && x.archivedAt);
+    let html = `
+      <div class="cash-page-header">
+        <div class="page-title cash-page-title">Kasse · ${escapeHtml(state.data.currentEvent)}</div>
+        <button id="openCashArchive" class="secondary-button cash-archive-button" type="button">Archiv <span class="group-count">${archived.length}</span></button>
+      </div>`;
+
+    if (!session) {
+      html += `<div class="card cash-intro"><div class="line-title">Keine laufende Kasse</div><div class="small-muted">Lege den Anfangsbestand fest. Ab dann werden alle abgeschlossenen Verkäufe dieses Events automatisch auf den erwarteten Kassenbestand angerechnet.</div></div><button id="startCash" class="action-button" style="width:100%">Kasse starten</button>`;
+    } else {
+      const sum = cashSessionSummary(session);
+      html += `
+        <div class="card cash-active-card">
+          <div class="row cash-title-row"><div><div class="small-muted">Laufende Kasse seit</div><div class="line-title">${escapeHtml(new Date(session.startedAt).toLocaleString('de-DE'))}</div></div><span class="status-pill ok">Aktiv</span></div>
+        </div>
+        <div class="stats-grid cash-stats-grid">
+          ${statCard('Anfangsbestand', fmt(session.openingBalance))}
+          ${statCard('Bestellungen', String(sum.orders.length))}
+          ${statCard('Verkäufe / Pfand netto', fmt(sum.sales))}
+          ${statCard('Trinkgeld', fmt(sum.tips))}
+        </div>
+        <div class="card cash-expected-card"><div class="small-muted">Erwarteter Kassenbestand</div><div class="cash-expected-value">${fmt(sum.expected)}</div><div class="small-muted">Anfangsbestand + Verkäufe/Pfand + Trinkgeld</div></div>
+        <button id="closeCash" class="action-button" style="width:100%">Kasse abschließen</button>`;
+    }
+
+    html += `
+      <div class="group-button" style="margin-top:18px"><span>Kassenabschlüsse</span><span class="group-count">${closed.length}</span></div>
+      <div id="cashHistory"></div>`;
+    el.content.innerHTML = html;
+
+    $('#openCashArchive')?.addEventListener('click', renderCashArchivePage);
+    $('#startCash')?.addEventListener('click', openStartCashModal);
+    $('#closeCash')?.addEventListener('click', () => openCloseCashModal(session));
+
+    const history = $('#cashHistory');
+    if (!closed.length) history.innerHTML = `<div class="card small-muted">Keine aktiven Kassenabschlüsse für dieses Event vorhanden.</div>`;
+    else closed.forEach(c => history.appendChild(makeCashHistoryCard(c, false)));
+
+    bindCashHistoryActions(renderCashPage);
+  }
+
+  function renderCashArchivePage() {
+    const archived = cashSessionsForEvent()
+      .filter(x => x.closedAt && x.archivedAt)
+      .sort((a,b) => new Date(b.archivedAt || b.closedAt) - new Date(a.archivedAt || a.closedAt));
+
+    el.content.innerHTML = `
+      <div class="cash-page-header cash-archive-page-header">
+        <div>
+          <div class="page-title cash-page-title">Archivierte Kassenabschlüsse</div>
+          <div class="small-muted">${escapeHtml(state.data.currentEvent)} · ${archived.length} ${archived.length === 1 ? 'Abschluss' : 'Abschlüsse'}</div>
+        </div>
+        <button id="backToCash" class="secondary-button cash-archive-button" type="button">← Kasse</button>
+      </div>
+      <div id="cashArchive"></div>`;
+
+    $('#backToCash')?.addEventListener('click', renderCashPage);
+    const archive = $('#cashArchive');
+    if (!archived.length) archive.innerHTML = `<div class="card small-muted">Noch keine archivierten Kassenabschlüsse vorhanden.</div>`;
+    else archived.forEach(c => archive.appendChild(makeCashHistoryCard(c, true)));
+
+    bindCashHistoryActions(renderCashArchivePage);
+  }
+
+  function openStartCashModal() {
+    modal(`<h2>Kasse starten</h2><div class="form-grid"><div class="card"><div class="small-muted">Event</div><div class="line-title">${escapeHtml(state.data.currentEvent)}</div></div><div class="field"><label>Anfangsbestand</label><input id="cashOpening" type="text" inputmode="decimal" value="0,00" placeholder="0,00"></div><div class="small-muted">Trage das Bargeld ein, das sich vor dem ersten Verkauf in der Kasse befindet.</div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="confirmCashStart" class="action-button">Kasse starten</button></div></div>`);
+    $('#confirmCashStart').onclick = () => {
+      if (activeCashSession()) { closeModal(); toast('Für dieses Event läuft bereits eine Kasse'); return; }
+      const opening = num($('#cashOpening').value);
+      if (opening < 0) { toast('Anfangsbestand darf nicht negativ sein'); return; }
+      state.data.cashSessions ||= [];
+      state.data.cashSessions.push({ id:id(), eventName:state.data.currentEvent, startedAt:nowIso(), openingBalance:Math.round(opening*100)/100, closedAt:null });
+      save(); closeModal(); renderCashPage(); toast('Kasse gestartet');
+    };
+  }
+  function openCloseCashModal(session) {
+    if (!session) return;
+    const sum = cashSessionSummary(session);
+    modal(`<h2>Kasse abschließen</h2><div class="form-grid"><div class="stats-grid cash-modal-stats">${statCard('Anfangsbestand', fmt(session.openingBalance))}${statCard('Verkäufe/Pfand', fmt(sum.sales))}${statCard('Trinkgeld', fmt(sum.tips))}${statCard('Sollbestand', fmt(sum.expected))}</div><div class="field"><label>Tatsächlicher Kassenbestand</label><input id="cashActual" type="text" inputmode="decimal" value="${escapeAttr(Number(sum.expected).toFixed(2).replace('.', ','))}" placeholder="0,00"></div><div id="cashCloseDifference" class="card cash-close-result"></div><div class="field"><label>Bemerkung zur Differenz <span class="small-muted">(optional)</span></label><textarea id="cashNote" rows="3" maxlength="300" placeholder="z. B. Wechselgeld vergessen, Pfandrückgabe nachgetragen …"></textarea></div><div class="row fill"><button class="secondary-button" data-close>Abbrechen</button><button id="confirmCashClose" class="action-button">Kasse abschließen</button></div></div>`);
+    const actualInput = $('#cashActual');
+    const result = $('#cashCloseDifference');
+    const refresh = () => {
+      const actual = num(actualInput.value);
+      const diff = actual - sum.expected;
+      result.innerHTML = `<div class="small-muted">Differenz</div><div class="cash-close-difference ${cashDifferenceClass(diff)}">${escapeHtml(cashDifferenceLabel(diff))}</div><div class="line-meta">Soll ${fmt(sum.expected)} · Ist ${fmt(actual)}</div>`;
+    };
+    actualInput.addEventListener('input', refresh); refresh();
+    $('#confirmCashClose').onclick = () => {
+      const actual = num(actualInput.value);
+      if (actual < 0) { toast('Kassenbestand darf nicht negativ sein'); return; }
+      const diff = Math.round((actual - sum.expected) * 100) / 100;
+      const note = ($('#cashNote')?.value || '').trim();
+      const noteText = note ? `\nBemerkung: ${note}` : '';
+      if (!confirm(`Kasse wirklich abschließen?\n\nSoll: ${fmt(sum.expected)}\nIst: ${fmt(actual)}\n${cashDifferenceLabel(diff)}${noteText}`)) return;
+      session.closedAt = nowIso();
+      session.actualBalance = Math.round(actual*100)/100;
+      session.expectedBalanceAtClose = Math.round(sum.expected*100)/100;
+      session.difference = diff;
+      session.salesAtClose = Math.round(sum.sales*100)/100;
+      session.tipsAtClose = Math.round(sum.tips*100)/100;
+      session.orderCountAtClose = sum.orders.length;
+      session.note = note;
+      save(); closeModal(); renderCashPage(); toast('Kasse abgeschlossen');
+    };
+  }
+
   function renderHistoryPage() {
     const orders = currentOrders().sort((a,b)=>new Date(b.date)-new Date(a.date));
     el.content.innerHTML = pageTitle(`Bestellhistorie · ${state.data.currentEvent}`) + `<div id="hist"></div>`;
@@ -955,9 +1245,13 @@
     if (!orders.length) { box.innerHTML = `<div class="card small-muted">Noch keine Bestellungen gespeichert.</div>`; return; }
     orders.forEach(o => {
       const positions = o.lines.filter(l=>!l.isDeposit).map(l=>`${l.quantity}x ${l.name}`).join(', ');
+      const baseTotal = totalOf(o);
+      const tip = tipOf(o);
+      const payable = payableTotalOf(o);
+      const change = Math.max(0, Number(o.received || 0) - payable);
       const card = document.createElement('div');
       card.className = 'card';
-      card.innerHTML = `<div class="small-muted">${new Date(o.date).toLocaleString('de-DE')}</div><div class="line-title">${escapeHtml(positions || 'Bestellung')}</div><div class="line-meta">${o.note ? 'Notiz: '+escapeHtml(o.note)+'<br>' : ''}Gesamt ${fmt(totalOf(o))} · Erhalten ${fmt(o.received)} · Rückgeld ${fmt(Math.max(0, Number(o.received)-totalOf(o)))}</div><button class="danger-button" style="width:100%;margin-top:10px" data-cancel-order="${escapeHtml(o.id)}">Bestellung stornieren</button>`;
+      card.innerHTML = `<div class="small-muted">${new Date(o.date).toLocaleString('de-DE')}</div><div class="line-title">${escapeHtml(positions || 'Bestellung')}</div><div class="line-meta">${o.note ? 'Notiz: '+escapeHtml(o.note)+'<br>' : ''}Bestellung ${fmt(baseTotal)}${tip > 0 ? ` · Trinkgeld ${fmt(tip)}` : ''}<br><strong>Gesamt ${fmt(payable)}</strong> · Erhalten ${fmt(o.received)} · Rückgeld ${fmt(change)}</div><button class="danger-button" style="width:100%;margin-top:10px" data-cancel-order="${escapeHtml(o.id)}">Bestellung stornieren</button>`;
       box.appendChild(card);
     });
     $$('[data-cancel-order]', box).forEach(button => button.onclick = () => cancelOrder(button.dataset.cancelOrder));
@@ -967,19 +1261,23 @@
     if (idx < 0) return;
     const orderToCancel = state.data.orders[idx];
     const when = new Date(orderToCancel.date).toLocaleString('de-DE');
-    if (!confirm(`Bestellung vom ${when} über ${fmt(totalOf(orderToCancel))} wirklich stornieren?`)) return;
+    if (!confirm(`Bestellung vom ${when} über ${fmt(payableTotalOf(orderToCancel))} wirklich stornieren?`)) return;
     state.data.orders.splice(idx,1);
     save();
     renderHistoryPage();
     toast('Bestellung storniert');
   }
   function totalOf(o) { return (o.lines||[]).reduce((s,l)=>s+Number(l.unitPrice)*Number(l.quantity),0); }
+  function tipOf(o) { return Math.max(0, Number(o?.tip) || 0); }
+  function payableTotalOf(o) { return totalOf(o) + tipOf(o); }
   function renderStatsPage() {
     const orders = currentOrders();
     const today = orders.filter(o=>new Date(o.date).toDateString()===new Date().toDateString());
     const lines = orders.flatMap(o=>o.lines||[]);
     const normal = lines.filter(l=>!l.isDeposit&&!l.isDepositReturn);
     const revenue = orders.reduce((sum,o)=>sum+totalOf(o),0);
+    const tips = orders.reduce((sum,o)=>sum+tipOf(o),0);
+    const totalIncome = revenue + tips;
     const soldQty = normal.reduce((sum,l)=>sum+Number(l.quantity||0),0);
     const depositIn = lines.filter(l=>l.isDeposit).reduce((sum,l)=>sum+Number(l.quantity)*Number(l.unitPrice),0);
     const depositOut = -lines.filter(l=>l.isDepositReturn).reduce((sum,l)=>sum+Number(l.quantity)*Number(l.unitPrice),0);
@@ -991,12 +1289,15 @@
         ${statCard('Bestellungen', String(orders.length))}
         ${statCard('Ø Bestellung', fmt(avg))}
         ${statCard('Verkaufte Artikel', String(soldQty))}
-        ${statCard('Umsatz gesamt', fmt(revenue))}
+        ${statCard('Umsatz ohne Trinkgeld', fmt(revenue))}
+        ${statCard('Trinkgeld', fmt(tips))}
+        ${statCard('Gesamteinnahmen', fmt(totalIncome))}
         ${statCard('Umsatz heute', fmt(today.reduce((sum,o)=>sum+totalOf(o),0)))}
         ${statCard('Pfandsaldo', fmt(depositBalance))}
       </div>
       ${stat('Pfand eingenommen', fmt(depositIn))}
       ${stat('Pfand zurückgegeben', fmt(depositOut))}
+      ${stat('Trinkgeld heute', fmt(today.reduce((sum,o)=>sum+tipOf(o),0)))}
       <div class="group-button">Top 5 Artikel</div>
       ${top.map((t,i)=>`<div class="card row"><div style="font-size:20px;font-weight:900;min-width:28px">${i+1}.</div><div style="flex:1"><div class="line-title">${escapeHtml(t.name)}</div><div class="line-meta">${t.qty} verkauft</div></div><div class="stat-value">${fmt(t.total)}</div></div>`).join('') || `<div class="card small-muted">Noch keine Verkäufe.</div>`}`;
   }
@@ -1178,7 +1479,7 @@
       const raw=JSON.parse(await file.text());
       const data = raw?.deckelAppBackup ? raw.data : raw;
       if (!data || !Array.isArray(data.groups) || !Array.isArray(data.articles) || !Array.isArray(data.orders)) throw new Error('invalid');
-      state.data = { groups:data.groups, articles:data.articles, events:Array.isArray(data.events)&&data.events.length?data.events:structuredClone(defaults.events), currentEvent:data.currentEvent||'Standard-Event', orders:data.orders };
+      state.data = { groups:data.groups, articles:data.articles, events:Array.isArray(data.events)&&data.events.length?data.events:structuredClone(defaults.events), currentEvent:data.currentEvent||'Standard-Event', orders:data.orders, cashSessions:Array.isArray(data.cashSessions)?data.cashSessions:[] };
       save(); showPage('orders', true); toast('Backup wiederhergestellt');
     } catch { toast('Backup konnte nicht gelesen werden'); }
   }

@@ -21,6 +21,11 @@
         <div class="brand">DeckelApp</div>
         <div id="eventLabel" class="event-label">Standard-Event</div>
       </div>
+      <button id="orderShortcut" class="ghost-button order-shortcut hidden" type="button" aria-label="Zur Bestellübersicht">
+        <span class="order-shortcut-icon" aria-hidden="true">🧾</span>
+        <span class="order-shortcut-label">Bestellung</span>
+        <span id="orderShortcutSummary" class="order-shortcut-summary">leer</span>
+      </button>
       <button id="installButton" class="ghost-button hidden" type="button">Installieren</button>
     </header>
 
@@ -45,11 +50,12 @@
         <button data-page="events" class="drawer-item">Event</button>
         <button data-page="articles" class="drawer-item">Artikelstamm</button>
         <button data-page="history" class="drawer-item">Historie</button>
+        <button data-page="cash" class="drawer-item">Kasse</button>
         <button data-page="stats" class="drawer-item">Statistik</button>
         <button data-page="settings" class="drawer-item">Einstellungen</button>
       </nav>
       <div class="drawer-footer">
-        <div id="appVersion" class="drawer-version">Version 1.1.6</div>
+        <div id="appVersion" class="drawer-version">Version 1.1.12</div>
         <div>Offline nutzbar · Lokale Speicherung</div>
       </div>
     </aside>

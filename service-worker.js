@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deckelapp-pwa-v1.1.6-customer-list';
+const CACHE_NAME = 'deckelapp-pwa-v1.1.12-order-nav-shortcut';
 const ASSETS = [
   './',
   './index.html',
