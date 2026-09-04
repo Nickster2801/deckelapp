@@ -10,7 +10,7 @@
   const num = (v) => Number(String(v ?? '').replace('€', '').replace(',', '.').trim()) || 0;
 
 
-  const APP_VERSION = '1.1.12';
+  const APP_VERSION = '1.1.14';
   const PREFS_KEY = 'deckelapp-prefs-v1';
   const PIN_ENABLED_KEY = 'deckelapp-admin-pin-enabled';
   const PIN_HASH_KEY = 'deckelapp-admin-pin-hash';

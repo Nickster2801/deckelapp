@@ -205,10 +205,18 @@ Im Bereich **Kasse** sind abgeschlossene und archivierte Kassenläufe jetzt geme
 - Dort können Abschlüsse wiederhergestellt oder endgültig gelöscht werden.
 
 
-## Version 1.1.12 – Bestellnavigation optimiert
+## Version 1.1.13 – Bestellnavigation optimiert
 
 - Der feste Button „Bestellung anzeigen“ am unteren Bildschirmrand wird nur noch im Bereich „Bestellungen“ angezeigt.
 - In Event, Artikelstamm, Historie, Kasse, Statistik und Einstellungen steht oben rechts ein kompakter Shortcut „Bestellung“.
 - Bei einer offenen Bestellung zeigt der Shortcut auf größeren Bildschirmen zusätzlich Artikelanzahl und Gesamtbetrag.
 - Auf kleinen Displays wird der Shortcut automatisch kompakter dargestellt.
 - Verwaltungsseiten nutzen ohne den unteren Bestellbutton die zusätzliche Bildschirmhöhe.
+
+
+## Version 1.1.14 – Kundenanzeige Header
+
+- Kopfzeile der Kundenanzeige gegen vertikales Abschneiden abgesichert.
+- Mehr Zeilenhöhe für App-Titel und Eventname.
+- Safe-Area-Abstände für iPad/iPhone/PWA ergänzt.
+- Logo, Titel und Eventname bleiben auch bei kompakter/dichter Darstellung vollständig sichtbar.

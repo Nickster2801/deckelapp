@@ -1,4 +1,4 @@
-const CACHE_NAME = 'deckelapp-pwa-v1.1.12-order-nav-shortcut';
+const CACHE_NAME = 'deckelapp-pwa-v1.1.14-header-safe';
 const ASSETS = [
   './',
   './index.html',

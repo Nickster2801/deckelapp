@@ -68,25 +68,29 @@ body { position: fixed; inset: 0; }
 /* Header bewusst links ausgerichtet – wie in der bisherigen Kundenanzeige. */
 .terminal-header {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: clamp(10px,1.45vw,18px) clamp(14px,2vw,26px);
+  padding:
+    calc(clamp(12px,1.45vw,18px) + env(safe-area-inset-top, 0px))
+    calc(clamp(14px,2vw,26px) + env(safe-area-inset-right, 0px))
+    clamp(10px,1.35vw,17px)
+    calc(clamp(14px,2vw,26px) + env(safe-area-inset-left, 0px));
   border-bottom: 1px solid var(--td-line);
   background: color-mix(in srgb, var(--td-surface) 91%, transparent);
   backdrop-filter: blur(12px);
 }
 .terminal-brand { display: flex; align-items: center; justify-content: flex-start; gap: clamp(10px,1.2vw,16px); min-width: 0; }
-.terminal-heading { min-width: 0; text-align: left; }
+.terminal-heading { min-width: 0; text-align: left; padding-block: 3px; overflow: visible; }
 .terminal-logo {
   width: clamp(44px,4.6vw,66px); height: clamp(44px,4.6vw,66px);
   object-fit: contain; border-radius: 14px; background: #fff;
   box-shadow: 0 6px 18px var(--td-shadow); flex: 0 0 auto;
 }
 .terminal-title {
-  font-size: clamp(21px,2.45vw,36px); line-height: 1.02; font-weight: 950;
-  letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: clamp(21px,2.45vw,36px); line-height: 1.16; font-weight: 950;
+  letter-spacing: -.02em; white-space: nowrap; overflow: visible;
 }
 .terminal-event {
-  margin-top: 3px; color: var(--td-muted); font-size: clamp(12px,1.25vw,18px);
-  font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 1px; color: var(--td-muted); font-size: clamp(12px,1.25vw,18px);
+  line-height: 1.28; font-weight: 800; white-space: nowrap; overflow: visible;
 }
 .terminal-count {
   flex: 0 0 auto; padding: 7px 12px; border-radius: 999px;
@@ -97,21 +101,22 @@ body { position: fixed; inset: 0; }
 .terminal-content { min-height: 0; overflow: hidden; padding: clamp(8px,1.1vw,14px); }
 .terminal-lines {
   width: 100%; height: 100%; min-height: 0; overflow: hidden;
-  display: flex; flex-direction: column;
+  display: flex; flex-direction: column; justify-content: flex-start;
   border: 1px solid var(--td-line); border-radius: clamp(14px,1.4vw,20px);
   background: color-mix(in srgb, var(--td-surface) 97%, var(--td-accent) 3%);
   box-shadow: 0 8px 24px var(--td-shadow);
 }
 
 .terminal-line {
-  min-width: 0; flex: 1 1 0; min-height: 0;
+  min-width: 0; flex: 0 0 auto; min-height: 0;
   display: grid; grid-template-columns: clamp(34px,4vw,54px) minmax(0,1fr) auto;
-  grid-template-rows: minmax(0,1fr) auto;
+  grid-template-rows: auto auto;
   column-gap: clamp(9px,1.15vw,16px); align-items: center;
   padding: clamp(7px,.9vw,12px) clamp(10px,1.35vw,18px);
   border-bottom: 1px solid var(--td-line);
 }
 .terminal-line:last-child { border-bottom: 0; }
+.terminal-line:not(:has(.terminal-line-deposit)) { padding-top: clamp(12px,1.1vw,16px); padding-bottom: clamp(12px,1.1vw,16px); }
 .terminal-line-icon {
   grid-column: 1; grid-row: 1 / span 2; align-self: center; justify-self: center;
   font-size: clamp(24px,3vw,42px); line-height: 1;
@@ -168,9 +173,9 @@ body { position: fixed; inset: 0; }
 .terminal-footer span { font-size: clamp(19px,2.3vw,31px); font-weight: 900; }
 .terminal-footer strong { font-size: clamp(32px,4.4vw,58px); line-height: 1; font-weight: 950; white-space: nowrap; }
 
-html[data-density="compact"] .terminal-header { padding-top: 8px; padding-bottom: 8px; }
+html[data-density="compact"] .terminal-header { padding-top: calc(9px + env(safe-area-inset-top, 0px)); padding-bottom: 8px; }
 html[data-density="compact"] .terminal-logo { width: 42px; height: 42px; }
-html[data-density="compact"] .terminal-line { padding-top: 5px; padding-bottom: 5px; }
+html[data-density="compact"] .terminal-line { padding-top: 6px; padding-bottom: 6px; }
 html[data-density="compact"] .terminal-line-icon { font-size: clamp(20px,2.5vw,34px); }
 html[data-density="compact"] .terminal-line-name { font-size: clamp(14px,1.7vw,23px); }
 html[data-density="compact"] .terminal-line-qty { font-size: clamp(14px,1.6vw,22px); }
@@ -178,11 +183,11 @@ html[data-density="compact"] .terminal-line-product-total { font-size: clamp(15p
 html[data-density="compact"] .terminal-line-deposit,
 html[data-density="compact"] .terminal-line-deposit-total { font-size: clamp(10px,1vw,14px); }
 
-html[data-density="dense"] .terminal-header { padding-top: 6px; padding-bottom: 6px; }
+html[data-density="dense"] .terminal-header { padding-top: calc(8px + env(safe-area-inset-top, 0px)); padding-bottom: 7px; }
 html[data-density="dense"] .terminal-logo { width: 36px; height: 36px; border-radius: 10px; }
 html[data-density="dense"] .terminal-title { font-size: clamp(17px,1.9vw,25px); }
 html[data-density="dense"] .terminal-event { font-size: clamp(10px,1vw,14px); }
-html[data-density="dense"] .terminal-line { padding: 3px 7px; grid-template-columns: 30px minmax(0,1fr) auto; column-gap: 7px; }
+html[data-density="dense"] .terminal-line { padding: 4px 7px; grid-template-columns: 30px minmax(0,1fr) auto; column-gap: 7px; }
 html[data-density="dense"] .terminal-line-icon { font-size: clamp(18px,2vw,28px); }
 html[data-density="dense"] .terminal-line-name { font-size: clamp(12px,1.4vw,19px); }
 html[data-density="dense"] .terminal-line-qty { font-size: clamp(12px,1.3vw,18px); }
@@ -194,7 +199,8 @@ html[data-density="dense"] .terminal-footer span { font-size: clamp(16px,1.8vw,2
 html[data-density="dense"] .terminal-footer strong { font-size: clamp(27px,3.4vw,43px); }
 
 @media (max-width: 600px) {
-  .terminal-header { gap: 8px; padding-left: 10px; padding-right: 10px; }
+  .terminal-header { gap: 8px; padding-left: calc(10px + env(safe-area-inset-left, 0px)); padding-right: calc(10px + env(safe-area-inset-right, 0px)); }
+  .terminal-heading { padding-block: 2px; }
   .terminal-logo { width: 40px; height: 40px; border-radius: 11px; }
   .terminal-count { display: none; }
   .terminal-title { font-size: clamp(18px,5.8vw,26px); }
